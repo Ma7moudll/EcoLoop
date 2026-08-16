@@ -1,0 +1,11 @@
+name: shared
+description: Recycle Vision shared domain models and policies (app + server).
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.8.1
+
+dev_dependencies:
+  lints: ^5.0.0
+  test: ^1.24.0

@@ -1,15 +1,15 @@
-# v0 sandbox internal files
-__v0_runtime_loader.js
-__v0_devtools.tsx
-__v0_jsx-dev-runtime.ts
-.snowflake/
-.v0-trash/
-.vercel/
+# Dart / Flutter
+.dart_tool/
+build/
+.flutter-plugins*
+.packages
+pubspec.lock
 
-# Environment variables
+# Server runtime state (seeded on boot; never committed)
+server/data/
+
+# Secrets
 .env*.local
 
-# Common ignores
-node_modules
-.next/
+# OS
 .DS_Store
