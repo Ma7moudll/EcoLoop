@@ -321,6 +321,11 @@ void main() {
     test('wrong compartment rejects the deposit and awards nothing', () async {
       final prediction = await api.predictDepositable(token);
 
+      // Points before the (should-be-rejected) deposit.
+      final (beforeCode, beforeBody) = await api.call(
+          'GET', '/api/v1/users/me', token: token);
+      final before = AppUser.fromJson(beforeBody['user'] as Map<String, dynamic>);
+
       final (sCode, sBody) = await api.call(
           'POST', '/api/v1/deposit/session',
           token: token,
@@ -345,8 +350,8 @@ void main() {
 
       final (mCode, mBody) = await api.call('GET', '/api/v1/users/me', token: token);
       final me = AppUser.fromJson(mBody['user'] as Map<String, dynamic>);
-      // Nothing was awarded — points stay at 0 for this fresh user.
-      expect(me.points, 0);
+      // The rejection awarded nothing: points are unchanged.
+      expect(me.points, before.points);
     });
   });
 
