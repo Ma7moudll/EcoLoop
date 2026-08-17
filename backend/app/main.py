@@ -10,7 +10,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import settings
 from .database import SessionLocal, create_tables
 from .mqtt import MqttGateway, handler
-from .routers import ai_router, auth_router, deposit_router, stations_router, user_data_router, ws_router
+from .routers import (
+    ai_router,
+    auth_router,
+    debug_router,
+    deposit_router,
+    stations_router,
+    user_data_router,
+    ws_router,
+)
 from .services import LeaderboardService, event_bus, registry, seed
 from .state import configure_gateway
 
@@ -84,6 +92,11 @@ def create_app() -> FastAPI:
     app.include_router(stations_router, prefix=prefix)
     app.include_router(user_data_router, prefix=prefix)
     app.include_router(ws_router)
+
+    # Debug-only byte-identity fingerprint route. Mounted ONLY when explicitly
+    # enabled (`DEBUG_IMAGE_HASH=true`) so it never exists for normal users.
+    if settings.debug_image_hash:
+        app.include_router(debug_router, prefix=prefix)
 
     @app.get("/health")
     def health() -> dict:

@@ -6,13 +6,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/app_theme.dart';
+import '../../../services/camera_capture.dart';
 import 'analyzing_screen.dart';
 
 /// Scan entry: full-screen camera preview with a capture shutter, plus a
 /// gallery fallback. On capture the image bytes are passed up; the flow then
 /// runs Analyzing → Result → Station → Deposit → Success.
 ///
-/// The [scan] entry keeps the MVP simple: one frame in, one prediction out.
+/// Camera capture goes through [CameraCaptureService] — the same code path the
+/// camera E2E integration test proves byte-for-byte against the backend.
 class ScanFlowRoot extends ConsumerStatefulWidget {
   const ScanFlowRoot({super.key});
 
@@ -22,7 +24,6 @@ class ScanFlowRoot extends ConsumerStatefulWidget {
 
 class _ScanFlowRootState extends ConsumerState<ScanFlowRoot> {
   CameraController? _camera;
-  List<CameraDescription>? _cameras;
   String? _error;
   bool _ready = false;
   bool _busy = false;
@@ -35,27 +36,23 @@ class _ScanFlowRootState extends ConsumerState<ScanFlowRoot> {
 
   Future<void> _initCamera() async {
     try {
-      _cameras = await availableCameras();
+      final controller = await CameraCaptureService.initialize();
+      if (!mounted) return;
+      _camera = controller;
+      setState(() => _ready = true);
+    } on CameraException catch (e) {
+      if (!mounted) return;
+      final denied = e.code == 'CameraAccessDenied' ||
+          e.code == 'cameraPermission';
+      setState(() => _error = denied
+          ? 'Camera permission denied. Allow camera access in Settings, '
+              'or use the gallery instead.'
+          : 'Camera failed to start. Use the gallery instead.');
     } catch (_) {
-      _cameras = null;
+      if (!mounted) return;
+      setState(() => _error =
+          'Camera unavailable on this device. Use the gallery instead.');
     }
-    if (!mounted) return;
-    final back = _cameras?.where((c) => c.lensDirection == CameraLensDirection.back).firstOrNull ??
-        _cameras?.firstOrNull;
-    if (back == null) {
-      setState(() => _error = 'Camera unavailable. Use the gallery instead.');
-      return;
-    }
-    final controller = CameraController(back, ResolutionPreset.medium);
-    try {
-      await controller.initialize();
-    } catch (e) {
-      setState(() => _error = 'Camera failed to start. Use the gallery instead.');
-      return;
-    }
-    if (!mounted) return;
-    _camera = controller;
-    setState(() => _ready = true);
   }
 
   @override
@@ -69,9 +66,10 @@ class _ScanFlowRootState extends ConsumerState<ScanFlowRoot> {
     if (camera == null || _busy) return;
     setState(() => _busy = true);
     try {
-      final file = await camera.takePicture();
-      final bytes = await file.readAsBytes();
-      _open(bytes);
+      final frame = await CameraCaptureService.capture(camera);
+      _open(frame.jpegBytes);
+    } on CameraException {
+      _showError('Capture failed. Try the gallery instead.');
     } catch (_) {
       _showError('Capture failed. Try the gallery instead.');
     } finally {

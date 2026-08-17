@@ -3,9 +3,18 @@ import 'package:flutter/foundation.dart';
 /// Compile-time + runtime configuration.
 ///
 /// Pass with `--dart-define`:
+///   # Android emulator (host loopback is 10.0.2.2)
+///   flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8080/api/v1
+///   # Physical device (LAN IP of the dev machine)
 ///   flutter run --dart-define=API_BASE_URL=http://192.168.1.10:8080/api/v1
 ///   flutter run --dart-define=DEMO_MODE=true
 ///   flutter run --dart-define=OFFLINE_MODE=true   (no backend required)
+///
+/// If no explicit `API_BASE_URL` is provided, the default **automatically maps
+/// the host for the Android emulator** (`http://10.0.2.2:8080/api/v1`), where
+/// `10.0.2.2` is the emulator's alias for the host machine's loopback. On a
+/// physical device there is no such alias — pass the LAN IP explicitly. See
+/// `docs/android-camera-e2e.md` for both setups.
 ///
 /// `DEMO_MODE` is a cosmetic flag that shows the subtle DEMO indicator; the
 /// authoritative decision to serve mock AI / simulated station responses lives
@@ -16,10 +25,19 @@ import 'package:flutter/foundation.dart';
 /// preview: pre-signed-in, mock AI, simulated deposit + points isolated behind
 /// the DEMO badge. Real points still only ever come from the backend.
 abstract final class AppConfig {
-  static const apiBaseUrl = String.fromEnvironment(
-    'API_BASE_URL',
-    defaultValue: 'http://localhost:8080/api/v1',
-  );
+  static const _apiBaseUrlOverride = String.fromEnvironment('API_BASE_URL');
+
+  /// Effective API base URL. Android debug builds default to the emulator host
+  /// mapping; everything else defaults to localhost. An explicit
+  /// `--dart-define=API_BASE_URL=...` always wins (see header docs).
+  static String get apiBaseUrl {
+    if (_apiBaseUrlOverride.isNotEmpty) return _apiBaseUrlOverride;
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android &&
+        kDebugMode) {
+      return 'http://10.0.2.2:8080/api/v1';
+    }
+    return 'http://localhost:8080/api/v1';
+  }
 
   static const demoMode = bool.fromEnvironment('DEMO_MODE', defaultValue: true);
 
@@ -29,7 +47,7 @@ abstract final class AppConfig {
 
   /// Even offline, API calls are never made; this mirrors the backend base URL
   /// for display purposes only.
-  static const apiBaseUrlForDisplay = kDebugMode ? 'http://10.0.2.2:8080/api/v1' : apiBaseUrl;
+  static String get apiBaseUrlForDisplay => kDebugMode ? 'http://10.0.2.2:8080/api/v1' : apiBaseUrl;
 
   /// Minimum weight (grams) a deposit must show for the backend to accept it.
   /// Mirrors the backend constant — used only for demo UX copy.

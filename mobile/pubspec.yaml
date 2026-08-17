@@ -23,6 +23,9 @@ dependencies:
   camera: ^0.11.0
   image_picker: ^1.1.2
 
+  # On-device SHA-256 for the Android camera E2E byte-identity proof
+  crypto: ^3.0.6
+
   # Real-session token storage on-device
   flutter_secure_storage: ^9.2.4
 
@@ -39,6 +42,9 @@ dev_dependencies:
   flutter_lints: ^5.0.0
   async: ^2.13.0
   stream_channel: ^2.1.4
+  integration_test:
+    sdk: flutter
+  path_provider: ^2.1.4
 
 flutter:
   uses-material-design: true

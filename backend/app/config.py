@@ -53,6 +53,12 @@ class Settings(BaseSettings):
     # -- Seed data -----------------------------------------------------------
     seed_on_startup: bool = True
 
+    # -- Debug ---------------------------------------------------------------
+    # When true, mounts the debug-only /debug/image-sha256 fingerprint route
+    # used by the Android camera E2E to prove byte identity. Never enable in
+    # production — it exists only for the verification harness.
+    debug_image_hash: bool = False
+
 
 @lru_cache
 def get_settings() -> Settings:

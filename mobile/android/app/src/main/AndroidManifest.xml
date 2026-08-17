@@ -2,10 +2,18 @@
     <!-- The app talks to the Recycle Vision backend (AI predictions, deposit
          sessions, WebSocket live status) — required in all build types. -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Live scan preview + JPEG capture via the camera plugin.
+         (The plugin also merges this, but declaring it here keeps the app's
+         runtime permission prompt explicit and makes the intent greppable.) -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false"/>
     <application
         android:label="recycle_vision"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:usesCleartextTraffic="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"
