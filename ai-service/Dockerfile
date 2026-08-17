@@ -9,6 +9,10 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
+COPY models ./models
+
+ENV AI_SERVICE_CLASSIFIER=real \
+    AI_MODEL_PATH=/srv/models/model.onnx
 
 EXPOSE 8051
 

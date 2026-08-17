@@ -1,18 +1,19 @@
-"""Deep-learning classifier backed by a trained model artifact.
+"""Deep-learning classifier backed by a trained ONNX artifact.
 
-Swappable backends (onnxruntime, TensorFlow Lite, PyTorch) are probed lazily.
-If no trained artifact exists at `AI_MODEL_PATH` a clear [ModelNotReadyError]
-is raised — the system never pretends an untrained model works.
+The default production path (`AI_SERVICE_CLASSIFIER=real`). Requires a trained
+artifact at `AI_MODEL_PATH` (default: `ai-service/models/model.onnx`) with its
+`preprocess.json` (input geometry, normalization and class order written by the
+training pipeline). If the artifact is missing a clear [ModelNotReadyError] is
+raised — the service never pretends an untrained model works, and the
+development classifier is never reachable from this path.
 
-To plug in a real model:
-  1. export it to ONNX (or provide a .tflite / torch checkpoint).
-  2. set AI_MODEL_PATH=/data/model.onnx
-  3. set AI_SERVICE_CLASSIFIER=real
-No backend code changes required beyond the (small) preprocessing hook in
-`_preprocess`.
+The DEVELOPMENT_FORCE_* environment variables (used only as an isolated test
+fixture for `DevelopmentClassifier`) are deliberately NOT read here.
 """
 from __future__ import annotations
 
+import io
+import json
 import os
 from pathlib import Path
 
@@ -23,6 +24,10 @@ from .base import ClassificationResult, WasteClassifier
 
 # Adversarial classes the service can never report.
 VALID = {"plastic", "metal", "paper", "other"}
+DEFAULT_CLASSES = ("plastic", "metal", "paper", "other")
+DEFAULT_GEOMETRY = {"input_size": 224, "resize": 256}
+DEFAULT_MEAN = (0.485, 0.456, 0.406)
+DEFAULT_STD = (0.229, 0.224, 0.225)
 
 
 class ModelNotReadyError(RuntimeError):
@@ -36,12 +41,18 @@ class RealInferenceClassifier(WasteClassifier):
         if self.backend_name is None:
             raise ModelNotReadyError(
                 "No trained model artifact found at "
-                f"{self.model_path or '<unset>'}. "
-                "Train/export a model and set AI_MODEL_PATH, or run the "
+                f"{self.model_path or '<unset>'}. Train/export a model (see "
+                "app/training/train.py) and set AI_MODEL_PATH, or run the "
                 "isolated DevelopmentClassifier (AI_SERVICE_CLASSIFIER=development) "
                 "which is explicitly labeled as non-real."
             )
         self._session = self._load(self.model_path, self.backend_name)
+        self.classes = self._load_metadata(self.model_path)
+        if len(self.classes) != 4 or any(c not in VALID for c in self.classes):
+            raise ModelNotReadyError(
+                f"model classes {self.classes} must be exactly the 4 production "
+                f"classes {list(VALID)} (see preprocess.json)"
+            )
 
     @staticmethod
     def _detect_backend(model_path: Path, backend: str) -> str | None:
@@ -88,32 +99,62 @@ class RealInferenceClassifier(WasteClassifier):
             return torch.jit.load(str(model_path), map_location="cpu")
         raise ModelNotReadyError(f"Unsupported backend {backend}")
 
+    @staticmethod
+    def _load_metadata(model_path: Path) -> tuple[str, ...]:
+        """Read class order + geometry from `preprocess.json` beside the model
+        (written by the training pipeline); fall back to known defaults."""
+        meta = model_path.with_name("preprocess.json")
+        if meta.exists():
+            data = json.loads(meta.read_text(encoding="utf-8"))
+            classes = tuple(data.get("classes") or DEFAULT_CLASSES)
+            return classes
+        return DEFAULT_CLASSES
+
     @property
     def model_name(self) -> str:
         return "real"
 
     def predict(self, image_data: bytes) -> ClassificationResult:
-        image = PIL.Image.open(__import__("io").BytesIO(image_data)).convert("RGB")
+        image = PIL.Image.open(io.BytesIO(image_data)).convert("RGB")
         tensor = self._preprocess(image)
         probabilities = self._forward(tensor)
-        if self.backend_name == "tflite":
+        if probabilities.ndim == 2:
             probabilities = probabilities[0]
+        if probabilities.size != len(self.classes):
+            raise ModelNotReadyError(
+                f"model output width {probabilities.size} != classes "
+                f"{len(self.classes)} — stale artifact?"
+            )
         idx = int(np.argmax(probabilities).item())
-        predicted = ("plastic", "metal", "paper", "other")[idx]
+        predicted = self.classes[idx]
         confidence = float(np.clip(probabilities[idx], 0.0, 1.0))
         return ClassificationResult(
             predicted_class=predicted if predicted in VALID else "other",
-            confidence=confidence,
+            confidence=round(confidence, 4),
             model="real",
         )
 
     def _preprocess(self, image: PIL.Image.Image) -> np.ndarray:
-        """Resize + normalize — the only hook that depends on the chosen model.
-        Default: MobileNet-style 224x224, ImageNet mean/std."""
-        resized = image.resize((224, 224))
+        """Resize -> center-crop -> normalize -> NCHW. Geometry and
+        normalization are read from preprocess.json and therefore match the
+        training pipeline exactly (see app/training/train.py)."""
+        size = DEFAULT_GEOMETRY["input_size"]
+        resize = DEFAULT_GEOMETRY["resize"]
+        mean = np.asarray(DEFAULT_MEAN, dtype=np.float32)
+        std = np.asarray(DEFAULT_STD, dtype=np.float32)
+
+        meta = self.model_path.with_name("preprocess.json")
+        if meta.exists():
+            data = json.loads(meta.read_text(encoding="utf-8"))
+            size = int(data.get("input_size", size))
+            resize = int(data.get("resize", resize))
+            mean = np.asarray(data.get("mean", DEFAULT_MEAN), dtype=np.float32)
+            std = np.asarray(data.get("std", DEFAULT_STD), dtype=np.float32)
+
+        resized = image.resize((resize, resize))
+        offset = (resize - size) // 2
+        resized = resized.crop((offset, offset, offset + size, offset + size))
         arr = np.asarray(resized, dtype=np.float32) / 255.0
-        mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
-        std = np.array([0.229, 0.224, 0.225], dtype=np.float32)
         arr = (arr - mean) / std
         return np.transpose(arr, (2, 0, 1))[None, ...]
 

@@ -4,6 +4,5 @@ pillow>=10.0
 numpy>=1.26
 pydantic-settings>=2.5
 python-multipart>=0.0.12
-# Optional real-inference backends (uncomment once a model is trained):
-# onnxruntime>=1.18
-# -e torch  (or install official pytorch wheels)
+# Runtime inference backend (real classifier):
+onnxruntime>=1.18

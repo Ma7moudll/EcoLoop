@@ -17,7 +17,6 @@ Prerequisites: local PostgreSQL (role recycle/recycle), mosquitto at
 """
 from __future__ import annotations
 
-import io
 import os
 import socket
 import subprocess
@@ -30,6 +29,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 PYTHON = str(ROOT / ".venv" / "bin" / "python")
 MOSQUITTO_BIN = Path("/opt/homebrew/sbin/mosquitto")
+AI_MODEL_PATH = ROOT / "ai-service" / "models" / "model.onnx"
+FIXTURES_DIR = ROOT / "ai-service" / "tests" / "fixtures"
 
 HOST = "127.0.0.1"
 MQTT_PORT = 1884
@@ -48,9 +49,7 @@ os.environ.setdefault("SIMULATOR_RAMP_STEP", "0")
 sys.path.insert(0, str(ROOT / "hardware-simulator"))
 
 import httpx  # noqa: E402
-import numpy as np  # noqa: E402
 import psycopg2  # noqa: E402
-from PIL import Image  # noqa: E402
 
 from hardware import Carriage, LoadCell  # noqa: E402
 from scenarios import DepositPlan  # noqa: E402
@@ -72,12 +71,15 @@ def _wait_port(port: int, timeout: float = 30.0) -> None:
     raise RuntimeError(f"port {port} never came up")
 
 
-def _make_image(rgb: tuple[int, int, int]) -> bytes:
-    arr = np.zeros((64, 64, 3), dtype=np.uint8)
-    arr[:, :] = rgb
-    buf = io.BytesIO()
-    Image.fromarray(arr).save(buf, format="PNG")
-    return buf.getvalue()
+def _fixture_bytes(name: str) -> bytes:
+    """Confidence-band fixture images curated by the training pipeline from
+    the real model (see ai-service/app/training/train.py / fixtures.json)."""
+    path = FIXTURES_DIR / name
+    if not path.exists():
+        raise SystemExit(
+            f"fixture {path} missing — run the training pipeline to curate it"
+        )
+    return path.read_bytes()
 
 
 def _connect_pg():
@@ -135,6 +137,9 @@ class ScenarioControl:
 def main() -> None:
     # -- prerequisites ---------------------------------------------------------
     assert MOSQUITTO_BIN.exists(), f"mosquitto not found at {MOSQUITTO_BIN}"
+    assert AI_MODEL_PATH.exists(), (
+        f"trained model not found at {AI_MODEL_PATH} — run the training pipeline first"
+    )
     if not _port_free(MQTT_PORT):
         raise SystemExit(f"port {MQTT_PORT} busy — stop the running broker")
     if not _port_free(AI_PORT):
@@ -161,11 +166,17 @@ def main() -> None:
         _wait_port(MQTT_PORT)
 
         # -- ai-service ---------------------------------------------------------
-        def start_ai(extra_env: dict | None = None) -> subprocess.Popen:
+        def start_ai() -> subprocess.Popen:
             env = dict(os.environ)
-            env.update({"PYTHONPATH": str(ROOT / "ai-service")})
-            if extra_env:
-                env.update(extra_env)
+            env.update({
+                "PYTHONPATH": str(ROOT / "ai-service"),
+                "AI_SERVICE_CLASSIFIER": "real",
+                "AI_MODEL_PATH": str(AI_MODEL_PATH),
+                # Production inference MUST NOT read development overrides;
+                # they are set to poison values to prove the real path ignores them.
+                "DEVELOPMENT_FORCE_CLASS": "plastic",
+                "DEVELOPMENT_FORCE_CONFIDENCE": "0.99",
+            })
             return subprocess.Popen(
                 [PYTHON, "-m", "uvicorn", "app.main:app", "--port", str(AI_PORT),
                  "--log-level", "warning"],
@@ -266,13 +277,16 @@ def main() -> None:
         def points_now() -> int:
             return client.get("/api/v1/users/me", headers=headers).json()["user"]["points"]
 
-        def predict(rgb: tuple[int, int, int]) -> dict:
+        def predict_bytes(blob: bytes) -> dict:
             r = client.post(
                 "/api/v1/ai/predict", headers=headers,
-                files={"image": ("capture.png", _make_image(rgb), "image/png")},
+                files={"image": ("capture.png", blob, "image/png")},
             )
             assert r.status_code == 200, r.text
             return r.json()
+
+        def predict_fixture(name: str) -> dict:
+            return predict_bytes(_fixture_bytes(name))
 
         def create_session(prediction_id: str) -> dict:
             r = client.post(
@@ -323,10 +337,11 @@ def main() -> None:
 
         start = points_now()
         control.plan = DepositPlan(name="valid-plastic")
-        pred = predict((10, 10, 235))
+        pred = predict_fixture("high_conf_plastic.png")
         assert pred["predicted_class"] == "plastic", pred
-        assert pred["source"] == "demo", pred  # ai-service runs the dev model
+        assert pred["source"] == "ai", pred  # real trained model, not demo
         assert pred["confidence"] >= 0.80, pred  # auto-routable
+        record("Real AI: plastic image -> plastic, source=ai", pred["source"] == "ai")
 
         session = create_session(pred["prediction_id"])
         op_a = session["operation_id"]
@@ -378,7 +393,7 @@ def main() -> None:
         # =========================================================================
         start = points_now()
         control.plan = DepositPlan(name="wrong-position", destination_position=2, actual_position=2)
-        pred = predict((10, 10, 235))
+        pred = predict_fixture("high_conf_plastic.png")
         session = create_session(pred["prediction_id"])
         data = wait_status(session["operation_id"], "rejected")
         record("Wrong-position rejected", "wrong_position" in data["reject_reason"], data["reject_reason"])
@@ -395,7 +410,7 @@ def main() -> None:
             final_weight=0.5,
             emit_machine_status="underweight",
         )
-        pred = predict((210, 160, 20))  # metal-ish; routing irrelevant here
+        pred = predict_fixture("high_conf_plastic.png")  # routing irrelevant here
         session = create_session(pred["prediction_id"])
         data = wait_status(session["operation_id"], "rejected")
         record(
@@ -411,7 +426,7 @@ def main() -> None:
         start = points_now()
         control.plan = DepositPlan(name="expired")
         control.hold_seconds = 1.0
-        pred = predict((10, 10, 235))
+        pred = predict_fixture("high_conf_plastic.png")
         session = create_session(pred["prediction_id"])
         _force_expire(session["operation_id"])  # session lapses before terminal
         data = wait_status(session["operation_id"], "expired")
@@ -426,7 +441,7 @@ def main() -> None:
         start = points_now()
         control.plan = DepositPlan(name="cancelled")  # machine still completes
         control.hold_seconds = 0.6
-        pred = predict((10, 10, 235))
+        pred = predict_fixture("high_conf_plastic.png")
         session = create_session(pred["prediction_id"])
         r = client.post(f"/api/v1/deposit/{session['operation_id']}/cancel", headers=headers)
         assert r.status_code == 200, r.text
@@ -442,7 +457,7 @@ def main() -> None:
         # =========================================================================
         start = points_now()
         control.plan = DepositPlan(name="duplicate", duplicate_terminal=True)
-        pred = predict((10, 10, 235))
+        pred = predict_fixture("high_conf_plastic.png")
         session = create_session(pred["prediction_id"])
         data = wait_status(session["operation_id"], "confirmed")
         time.sleep(0.5)  # second identical event must be ignored
@@ -451,22 +466,14 @@ def main() -> None:
                f"start={start} now={points_now()}")
 
         # =========================================================================
-        # Scenario G — LOW CONFIDENCE: backend refuses to route (real AI).
+        # Scenario G — LOW CONFIDENCE: the real model is genuinely unsure, so
+        # the backend refuses to route (real AI, no force overrides).
         # =========================================================================
         control.hold_seconds = 0.0
         control.plan = None
-        ai_proc.terminate()
-        ai_proc.wait(timeout=15)
-        procs.remove(ai_proc)
-        ai_proc = start_ai({
-            "DEVELOPMENT_FORCE_CLASS": "plastic",
-            "DEVELOPMENT_FORCE_CONFIDENCE": "0.40",
-        })
-        procs.append(ai_proc)
-        _wait_port(AI_PORT)
 
-        pred = predict((10, 10, 235))
-        assert pred["confidence"] == 0.40, pred
+        pred = predict_fixture("low_conf.png")
+        assert pred["confidence"] < 0.50, pred  # considered too weak to route
         r = client.post(
             "/api/v1/deposit/session", headers=headers,
             json={"ai_prediction_id": pred["prediction_id"], "station_id": "st-001"},
@@ -477,21 +484,12 @@ def main() -> None:
         )
 
         # =========================================================================
-        # Scenario H — MEDIUM CONFIDENCE: manual mode, no automatic points.
+        # Scenario H — MEDIUM CONFIDENCE: real model straddles the band, backend
+        # routes in manual mode and never auto-awards.
         # =========================================================================
-        ai_proc.terminate()
-        ai_proc.wait(timeout=15)
-        procs.remove(ai_proc)
-        ai_proc = start_ai({
-            "DEVELOPMENT_FORCE_CLASS": "plastic",
-            "DEVELOPMENT_FORCE_CONFIDENCE": "0.65",
-        })
-        procs.append(ai_proc)
-        _wait_port(AI_PORT)
-
         start = points_now()
-        pred = predict((10, 10, 235))
-        assert pred["confidence"] == 0.65, pred
+        pred = predict_fixture("medium_conf.png")
+        assert 0.50 <= pred["confidence"] < 0.80, pred
         before_routes = len(control.received)
         session = create_session(pred["prediction_id"])
         control.plan = None  # the physical drop never happens

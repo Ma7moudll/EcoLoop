@@ -1,34 +1,18 @@
-# Training pipeline placeholder.
-#
-# A labelled waste-photo dataset (plastic/metal/paper/other) plus a trained
-# artifact are NOT yet present in this repository. Until a model exists:
-#
-#   1. build/collect a labelled dataset of station-top camera captures
-#   2. train a small CNN (see train_classifier.py) and export to ONNX
-#   3. set AI_SERVICE_CLASSIFIER=real and AI_MODEL_PATH=/app/models/model.onnx
-#
-# Before that, the service -- and only the service -- may run the clearly
-# labelled DevelopmentClassifier (source=demo) so the pipeline is exercisable
-# end-to-end. Nothing in the backend or hardware loop needs to change.
+"""[legacy] Training CLI alias.
+
+The real training pipeline lives in `app.training.train`:
+
+    python -m app.training.train [--data-dir data/raw] [--epochs-head 8] ...
+
+Run it from the `ai-service` directory. It prepares the dataset, trains a
+MobileNetV3-Small head on TrashNet (mapped to plastic/metal/paper/other),
+exports ONNX for the serving `RealInferenceClassifier`, writes the model
+evaluation report + confusion matrix, and curates the confidence-band fixture
+images used by tests and the E2E proof.
+"""
 from __future__ import annotations
 
-import os
-import sys
-
-
-def requires_torch():
-    try:
-        import torch  # noqa: F401
-    except ImportError:
-        sys.exit("torch is required for training; install extras or use the dev classifier for now")
-
-
-def main() -> None:
-    requires_torch()
-    dataset_dir = os.environ.get("DATASET_DIR", "data")
-    print(f"[TRAIN] placeholder — training on {dataset_dir} is not part of this deliverable.")
-    print("Export the checkpoint with torch.onnx.export once training exists.")
-
+from .train import main
 
 if __name__ == "__main__":
     main()

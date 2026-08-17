@@ -74,18 +74,21 @@ docker compose -f infra/docker-compose.yml --profile simulator up simulator
 ## Standing end-to-end proof
 
 `scripts/e2e_real_chain.py` runs the entire chain against **real services**
-(no TestClient): a spawned mosquitto on 1884, the ai-service on 8051, the
-backend on 8080 wired to a real PostgreSQL database, an in-process simulator
-acting as the ESP32, and a real WebSocket client. It drives the valid deposit
-plus wrong-position, underweight, expired, cancelled, duplicate-terminal,
-low-confidence and medium-confidence scenarios over HTTP+MQTT+WS, then sweeps
-the database (exactly 2 paid events, no duplicate rows, rejected/expired award
-0, final balance 45+5+5). Requires local PostgreSQL (`recycle`/`recycle`,
-database `recycle_vision_e2e`) and free ports 1884/8051/8080.
+(no TestClient): a spawned mosquitto on 1884, the ai-service on 8051 **serving
+the trained ONNX model**, the backend on 8080 wired to a real PostgreSQL
+database, an in-process simulator acting as the ESP32, and a real WebSocket
+client. It drives the valid deposit plus wrong-position, underweight, expired,
+cancelled, duplicate-terminal, low-confidence and medium-confidence scenarios
+over HTTP+MQTT+WS, then sweeps the database (exactly 2 paid events, no
+duplicate rows, rejected/expired award 0, final balance 45+5+5). The confidence
+scenarios use **real model scores** on curated fixture images — the ai-service
+is started with `DEVELOPMENT_FORCE_*` poison values to prove the production
+path ignores them. Requires local PostgreSQL (`recycle`/`recycle`, database
+`recycle_vision_e2e`) and free ports 1884/8051/8080.
 
 ```bash
 .venv/bin/python scripts/e2e_real_chain.py
-# RESULT: 29 passed, 0 failed
+# RESULT: 30 passed, 0 failed
 ```
 
 ## Tests
@@ -93,7 +96,7 @@ database `recycle_vision_e2e`) and free ports 1884/8051/8080.
 ```bash
 cd backend && PYTHONPATH=. .venv/bin/python -m pytest tests -q     # 57 tests
 cd hardware-simulator && SIMULATOR_RAMP_STEP=0 .venv/bin/python -m pytest tests -q  # 27
-cd ai-service && PYTHONPATH=. .venv/bin/python -m pytest tests -q  # 15
+cd ai-service && PYTHONPATH=. .venv/bin/python -m pytest tests -q  # 29 tests
 cd mobile && flutter test                                          # 27 widget/unit
 ```
 

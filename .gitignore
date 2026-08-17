@@ -22,5 +22,9 @@ server/data/
 *.db
 *.log
 
+# ML training artifacts (dataset, checkpoints — never committed)
+ai-service/data/
+ai-service/models/*.pt
+
 # OS
 .DS_Store

@@ -108,7 +108,7 @@ a token is missing. Either path converges on the identical terminal `Deposit`.
 `scripts/e2e_real_chain.py` starts the **real** mosquitto broker, the real
 ai-service, the real backend on **PostgreSQL**, and an in-process simulator
 plus a real WebSocket client, then runs every scenario over HTTP+MQTT+WS and
-sweeps the database. It asserts 29 checks (exactly 2 paid events, no duplicate
+sweeps the database. It asserts 30 checks (exactly 2 paid events, no duplicate
 awards, expired/cancelled/rejected award 0, WS auth gate 4401, medium-conf
 manual routing never awards points). Running it against real Postgres also
 surfaced and fixed two dialect bugs that SQLite-only tests could not: aware-vs-
@@ -135,9 +135,15 @@ Driven by the `routing_policy` DB table, not hardcoded.
 
 ## Honesty about the model
 
-- `ai-service` has no trained model in the repo by design.
-- `RealInferenceClassifier` raises `ModelNotReadyError` if no artifact exists —
-  the system never pretends an untrained model works.
-- `DevelopmentClassifier` (`AI_SERVICE_CLASSIFIER=development`) is a clearly
-  labeled heuristic: `model: "development"` → backend `source: "demo"` → the
-  UI's subtle DEMO badge stays honest.
+- `ai-service` serves a **trained** MobileNetV3-Small ONNX artifact
+  (`AI_SERVICE_CLASSIFIER=real`, the default) — see `ai-service/reports/
+  eval_report.md` for dataset, metrics, confusion matrix and limitations.
+- `RealInferenceClassifier` raises `ModelNotReadyError` if the artifact is
+  missing — the system never pretends an untrained model works.
+- `DevelopmentClassifier` (`AI_SERVICE_CLASSIFIER=development`) is an
+  **explicitly isolated test fixture** — a clearly labeled heuristic
+  (`model: "development"` → backend `source: "demo"` → the UI's subtle DEMO
+  badge). Its `DEVELOPMENT_FORCE_*` knobs are never read by the real
+  classifier; a dedicated test proves production inference is identical with
+  and without them, and the E2E starts the real service with poison values set
+  to prove the same over the wire.
