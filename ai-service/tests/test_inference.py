@@ -215,3 +215,13 @@ class TestHttpContract:
         with TestClient(app) as c:
             r = c.post("/predict", files={"image": ("empty.jpg", b"", "image/jpeg")})
             assert r.status_code == 422
+
+    def test_corrupt_image_rejected_422_not_500(self):
+        from fastapi.testclient import TestClient
+
+        from app.main import app
+
+        junk = b"\xff\xd8\xff\xe0-corrupted-not-a-jpeg" + os.urandom(64)
+        with TestClient(app) as c:
+            r = c.post("/predict", files={"image": ("corrupt.jpg", junk, "image/jpeg")})
+            assert r.status_code == 422, r.text

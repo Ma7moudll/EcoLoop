@@ -47,6 +47,7 @@ The HTTP layer can create and cancel deposit sessions, but `POST
 | Shared models | `shared/` | Dart `Prediction`, `Deposit`, `AppUser`, … wire contract |
 | Backend | `backend/` | FastAPI, SQLAlchemy 2, Alembic; all business rules |
 | AI service | `ai-service/` | standalone classifier over HTTP; `development` or `real` mode |
+| AI validation | `ai-service/app/tools/` | data collection + model validation pipeline for the station-top camera (see `docs/ai-validation.md`) |
 | Hardware simulator | `hardware-simulator/` | the future ESP32, speaking the MQTT contract |
 | Infra | `infra/` | docker-compose, mosquitto config, Postgres bootstrap |
 | Docs | `docs/` | this repo's operating manual |

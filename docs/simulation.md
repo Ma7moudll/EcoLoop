@@ -96,12 +96,27 @@ path ignores them. Requires local PostgreSQL (`recycle`/`recycle`, database
 ```bash
 cd backend && PYTHONPATH=. .venv/bin/python -m pytest tests -q     # 57 tests
 cd hardware-simulator && SIMULATOR_RAMP_STEP=0 .venv/bin/python -m pytest tests -q  # 27
-cd ai-service && PYTHONPATH=. .venv/bin/python -m pytest tests -q  # 29 tests
+cd ai-service && PYTHONPATH=. .venv/bin/python -m pytest tests -q  # 52 (incl. pipeline tools)
 cd mobile && flutter test                                          # 27 widget/unit
 ```
+
+The ai-service suite now includes the data-collection / model-validation
+pipeline regressions (`tests/test_tools.py` — leakage-free split, metadata
+uniqueness, duplicate detection, augmentation contract, calibration
+determinism) and the real-model open-set tests (`tests/test_real_security.py`).
+See `docs/ai-validation.md` for the pipeline itself.
 
 The integration tests in `backend/tests/integration` spawn a real mosquitto and
 drive the whole chain: predict → session → MQTT route command → simulator
 physics → backend validation → points in Postgres/SQLite. The mobile suite
 covers the WebSocket live-phase rendering, the polling fallback, and every
 terminal outcome.
+
+## AI data collection & model validation
+
+The station-top camera feed is prepared and validated with the tools under
+`ai-service/app/tools/` (collection, dataset quality, leakage-free split,
+calibration, fine-tune comparison, open-set probe). A simulated pilot dataset
+stands in until real camera captures exist — provenance is always tagged
+`source=simulated-station-pilot`, and coverage of the real station camera is
+**not** claimed. See `docs/ai-validation.md`.
