@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:recycle_vision/app.dart';
+import 'package:recycle_vision/core/formatters.dart';
 import 'package:recycle_vision/offline/offline_backend.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -20,7 +21,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('DEMO'), findsOneWidget);
-    expect(find.text('Good morning, Demo!'), findsOneWidget);
+    expect(
+      find.text('${greetingFor(DateTime.now())}, Demo!'),
+      findsOneWidget,
+    );
     expect(find.text('Home'), findsOneWidget);
     expect(find.text('Recent activity'), findsOneWidget);
   });

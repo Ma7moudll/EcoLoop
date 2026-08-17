@@ -8,8 +8,19 @@ pubspec.lock
 # Server runtime state (seeded on boot; never committed)
 server/data/
 
-# Secrets
+# Secrets (never commit real values)
+.env
 .env*.local
+
+# Python runtime / venv
+.venv/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local runtime state
+*.db
+*.log
 
 # OS
 .DS_Store

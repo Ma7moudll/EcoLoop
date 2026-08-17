@@ -6,6 +6,7 @@ import '../core/app_config.dart';
 import '../services/ai_classifier.dart';
 import '../services/auth_repository.dart';
 import '../services/data_repository.dart';
+import '../services/deposit_status_channel.dart';
 
 /// Lowest-level providers. Everything more specific builds on these.
 
@@ -36,4 +37,11 @@ final dataRepositoryProvider = Provider<DataRepository>((ref) {
 
 final depositRepositoryProvider = Provider<DepositRepository>((ref) {
   return DepositRepository(ref.watch(apiClientProvider));
+});
+
+final depositStatusChannelProvider = Provider<DepositStatusChannel>((ref) {
+  return DepositStatusChannel(
+    ref.watch(apiClientProvider),
+    ref.watch(depositRepositoryProvider),
+  );
 });

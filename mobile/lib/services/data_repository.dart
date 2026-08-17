@@ -57,7 +57,11 @@ enum LeaderScope {
   const LeaderScope(this.apiValue);
 }
 
-/// Deposit session + confirm operations.
+/// Deposit session + live status. Points are ONLY ever awarded server-side
+/// after a physical MQTT sensor event; the client polls [awaitDeposit] until
+/// the station (or, in offline preview, its simulation) reaches a terminal
+/// state. There is deliberately no HTTP confirm shortcut — the backend has no
+/// such route, and points can never come from the client.
 class DepositRepository {
   final ApiClient _api;
 
@@ -73,25 +77,38 @@ class DepositRepository {
     return Deposit.fromJson(body);
   }
 
-  /// Returns the confirm response. Points are ONLY ever present when the
-  /// backend accepted the deposit.
-  Future<({Deposit deposit, int pointsAwarded, int challengeBonus})> confirm({
-    required String operationId,
-    required int actualPosition,
-    required double weightGrams,
-    required bool mechanicalConfirmed,
+  Future<Deposit> fetchDeposit(String operationId) async {
+    final body = await _api.get('/deposit/$operationId');
+    return Deposit.fromJson(body);
+  }
+
+  Future<void> cancelSession(String operationId) async {
+    await _api.post('/deposit/$operationId/cancel');
+  }
+
+  /// Waits for the deposit to reach a terminal state. In online mode this
+  /// polls the real backend until the physical station finishes the drop; in
+  /// offline preview the simulated station resolves immediately. Points come
+  /// only from the returned deposit — never fabricated here.
+  Future<({Deposit deposit, int pointsAwarded, int challengeBonus})> awaitDeposit(
+    Deposit session, {
+    Duration pollInterval = const Duration(seconds: 2),
+    Duration timeout = const Duration(minutes: 3),
   }) async {
-    final body = await _api.post('/deposit/confirm', data: {
-      'operation_id': operationId,
-      'actual_position': actualPosition,
-      'weight_g': weightGrams,
-      'mechanical_confirmed': mechanicalConfirmed,
-    });
-    return (
-      deposit: Deposit.fromJson(body['deposit'] as Map<String, dynamic>),
-      pointsAwarded: (body['points_awarded'] as num?)?.toInt() ?? 0,
-      challengeBonus: (body['challenge_bonus'] as num?)?.toInt() ?? 0,
-    );
+    final deadline = DateTime.now().add(timeout);
+    var current = session;
+    while (DateTime.now().isBefore(deadline)) {
+      current = await fetchDeposit(session.operationId);
+      if (current.status.isTerminal) {
+        return (
+          deposit: current,
+          pointsAwarded: current.pointsAwarded,
+          challengeBonus: 0,
+        );
+      }
+      await Future<void>.delayed(pollInterval);
+    }
+    throw ApiException('The station did not respond in time. Please retry.');
   }
 }
 

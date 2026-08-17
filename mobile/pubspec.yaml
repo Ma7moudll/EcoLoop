@@ -16,6 +16,9 @@ dependencies:
   # Networking (multipart AI upload, interceptor auth)
   dio: ^5.7.0
 
+  # Realtime deposit status (falls back to HTTP polling when not available)
+  web_socket_channel: ^3.0.1
+
   # Camera capture + gallery upload fallback
   camera: ^0.11.0
   image_picker: ^1.1.2
@@ -34,6 +37,8 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
+  async: ^2.13.0
+  stream_channel: ^2.1.4
 
 flutter:
   uses-material-design: true

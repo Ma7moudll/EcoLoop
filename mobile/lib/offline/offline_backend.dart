@@ -3,6 +3,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared/shared.dart';
 
 import '../core/api_client.dart';
+import '../core/app_config.dart';
 import '../providers/providers.dart';
 import '../services/ai_classifier.dart';
 import '../services/auth_repository.dart';
@@ -290,13 +291,23 @@ class OfflineDepositRepository extends DepositRepository {
   }
 
   @override
-  Future<({Deposit deposit, int pointsAwarded, int challengeBonus})> confirm({
-    required String operationId,
-    required int actualPosition,
-    required double weightGrams,
-    required bool mechanicalConfirmed,
+  Future<({Deposit deposit, int pointsAwarded, int challengeBonus})> awaitDeposit(
+    Deposit session, {
+    Duration pollInterval = const Duration(seconds: 2),
+    Duration timeout = const Duration(minutes: 3),
   }) async {
-    final deposit = _store.deposits[operationId]!;
+    final deposit = _store.deposits[session.operationId]!;
+    return _simulateDrop(deposit);
+  }
+
+  /// Simulated station drop, mirroring the real validation gates
+  /// (compartment match, minimum weight, mechanical confirmation).
+  Future<({Deposit deposit, int pointsAwarded, int challengeBonus})> _simulateDrop(
+      Deposit deposit) async {
+    final actualPosition = deposit.expectedPosition;
+    final weightGrams = AppConfig.simulatedWeightGrams;
+    final mechanicalConfirmed = true;
+
     if (actualPosition != deposit.expectedPosition ||
         weightGrams < 1.0 ||
         !mechanicalConfirmed) {
@@ -315,7 +326,7 @@ class OfflineDepositRepository extends DepositRepository {
         expiresAt: deposit.expiresAt,
         rejectReason: 'Simulated rejection: wrong compartment or low weight.',
       );
-      _store.deposits[operationId] = rejected;
+      _store.deposits[deposit.operationId] = rejected;
       return (
         deposit: rejected,
         pointsAwarded: 0,
@@ -337,7 +348,7 @@ class OfflineDepositRepository extends DepositRepository {
       status: DepositStatus.confirmed,
       expiresAt: deposit.expiresAt,
     );
-    _store.deposits[operationId] = confirmed;
+    _store.deposits[deposit.operationId] = confirmed;
     _store.user = _store.user.copyWith(
       points: _store.user.points + confirmed.pointsAwarded,
     );

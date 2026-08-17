@@ -7,6 +7,7 @@ import '../../../core/app_config.dart';
 import '../../../core/app_theme.dart';
 import '../../../providers/data_providers.dart';
 import '../../../providers/providers.dart';
+import '../../../services/deposit_status_channel.dart';
 import '../../../widgets/station/deposit_steps.dart';
 import 'deposit_success_screen.dart';
 
@@ -23,12 +24,13 @@ class DepositScreen extends ConsumerStatefulWidget {
   ConsumerState<DepositScreen> createState() => _DepositScreenState();
 }
 
-enum _DepositPhase { creating, ready, submitting, rejected, error }
+enum _DepositPhase { creating, ready, waiting, rejected, error }
 
 class _DepositScreenState extends ConsumerState<DepositScreen> {
   _DepositPhase _phase = _DepositPhase.creating;
   Deposit? _session;
   String? _message;
+  String? _livePhaseLabel;
   bool _placed = false;
 
   @override
@@ -64,22 +66,46 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
     setState(() => _placed = true);
   }
 
-  Future<void> _confirmDrop() async {
+  /// Starts the physical drop and waits for the station to complete it. The
+  /// station (or its offline simulation) moves the carriage, reads the load
+  /// cell, and the backend validates the MQTT sensor events before awarding
+  /// points. This screen never writes points itself — it watches the realtime
+  /// WebSocket (falling back to HTTP polling) until the backend reports a
+  /// terminal state.
+  Future<void> _startDrop() async {
     final session = _session;
     if (session == null || _phase != _DepositPhase.ready) return;
-    setState(() => _phase = _DepositPhase.submitting);
+    setState(() {
+      _phase = _DepositPhase.waiting;
+      _livePhaseLabel = null;
+    });
+
+    ({Deposit deposit, int pointsAwarded, int challengeBonus}) result;
     try {
-      final repo = ref.read(depositRepositoryProvider);
-      final result = await repo.confirm(
-        operationId: session.operationId,
-        actualPosition: session.expectedPosition,
-        weightGrams: AppConfig.simulatedWeightGrams,
-        mechanicalConfirmed: true,
-      );
+      if (AppConfig.offlineMode) {
+        // No socket in the offline preview — the simulated station resolves
+        // immediately through the repository's offline override.
+        result = await ref
+            .read(depositRepositoryProvider)
+            .awaitDeposit(session);
+      } else {
+        result = await ref
+            .read(depositStatusChannelProvider)
+            .awaitDeposit(session, onLive: (live) {
+          if (!mounted) return;
+          setState(() => _livePhaseLabel =
+              DepositStatusChannel.phaseLabel(live.status));
+        });
+      }
       if (!mounted) return;
-      if (result.deposit.status == DepositStatus.rejected) {
+      if (result.deposit.status != DepositStatus.confirmed) {
         setState(() {
-          _message = result.deposit.rejectReason ?? 'Deposit rejected.';
+          _message = result.deposit.rejectReason ??
+              switch (result.deposit.status) {
+                DepositStatus.cancelled => 'Deposit cancelled.',
+                DepositStatus.expired => 'Deposit expired before completion.',
+                _ => 'Deposit rejected.',
+              };
           _phase = _DepositPhase.rejected;
         });
         return;
@@ -114,7 +140,7 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
     final compartment =
         compartmentForClass(widget.prediction.predictedClass);
     final busy = _phase == _DepositPhase.creating ||
-        _phase == _DepositPhase.submitting;
+        _phase == _DepositPhase.waiting;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Deposit at station')),
@@ -169,7 +195,8 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
                 child: Text(
                   _phase == _DepositPhase.creating
                       ? 'Starting session…'
-                      : 'Confirming deposit…',
+                      : _livePhaseLabel ??
+                          'Waiting for the station to complete the drop…',
                   style: const TextStyle(fontSize: 12, color: AppColors.muted),
                 ),
               ),
@@ -222,7 +249,7 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
                 session: session!,
                 placed: _placed,
                 onPlace: _placeItem,
-                onDrop: _confirmDrop,
+                onDrop: _startDrop,
               ),
             const SizedBox(height: 18),
             // Always-visible guidance

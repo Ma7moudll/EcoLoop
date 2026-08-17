@@ -2,6 +2,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:recycle_vision/core/api_client.dart';
 import 'package:recycle_vision/services/auth_repository.dart';
 import 'package:recycle_vision/services/data_repository.dart';
+import 'package:recycle_vision/services/deposit_status_channel.dart';
 import 'package:shared/shared.dart';
 
 /// No-op secure storage so auth fakes never touch platform channels.
@@ -131,6 +132,31 @@ Deposit fakeConfirmedDeposit({int awarded = 5}) => Deposit(
       expiresAt: DateTime.now().toUtc().add(const Duration(minutes: 5)),
     );
 
+/// A deposit in any state (live phase or terminal) for status tests.
+Deposit fakeDeposit(
+  DepositStatus status, {
+  int actualPosition = 0,
+  double weightGrams = 0,
+  bool mechanicalConfirmed = false,
+  int pointsAwarded = 0,
+  String? rejectReason,
+}) =>
+    Deposit(
+      operationId: 'OP-TEST',
+      predictionId: 'pred-test',
+      stationId: Station.defaultStation.id,
+      predictedClass: WasteClass.plastic,
+      expectedPosition: 1,
+      actualPosition: actualPosition,
+      weightGrams: weightGrams,
+      mechanicalConfirmed: mechanicalConfirmed,
+      potentialPoints: 5,
+      pointsAwarded: pointsAwarded,
+      status: status,
+      rejectReason: rejectReason,
+      expiresAt: DateTime.now().toUtc().add(const Duration(minutes: 5)),
+    );
+
 class FakeDataRepository extends DataRepository {
   FakeDataRepository() : super(ApiClient('http://localhost:9999'));
 
@@ -195,17 +221,44 @@ class FakeDepositRepository extends DepositRepository {
   }
 
   @override
-  Future<({Deposit deposit, int pointsAwarded, int challengeBonus})>
-      confirm({
-    required String operationId,
-    required int actualPosition,
-    required double weightGrams,
-    required bool mechanicalConfirmed,
+  Future<({Deposit deposit, int pointsAwarded, int challengeBonus})> awaitDeposit(
+    Deposit session, {
+    Duration pollInterval = const Duration(seconds: 2),
+    Duration timeout = const Duration(minutes: 3),
   }) async {
     return (
       deposit: outcome,
       pointsAwarded: outcome.pointsAwarded,
       challengeBonus: 0,
     );
+  }
+}
+
+/// Realtime channel fake: replays a script of live phases (with a small
+/// per-phase delay so the UI can render them) before returning a terminal
+/// outcome — exactly like the real WebSocket, without any socket.
+class FakeDepositStatusChannel extends DepositStatusChannel {
+  FakeDepositStatusChannel()
+      : super(ApiClient('http://localhost:9999')..setToken('tok'),
+            FakeDepositRepository());
+
+  final List<Deposit> live = [];
+  ({Deposit deposit, int pointsAwarded, int challengeBonus}) outcome =
+      (deposit: fakeConfirmedDeposit(), pointsAwarded: 5, challengeBonus: 0);
+  Duration phaseDelay = const Duration(milliseconds: 40);
+
+  @override
+  Future<({Deposit deposit, int pointsAwarded, int challengeBonus})>
+      awaitDeposit(
+    Deposit session, {
+    void Function(Deposit live)? onLive,
+    Duration pollInterval = const Duration(seconds: 2),
+    Duration timeout = const Duration(minutes: 3),
+  }) async {
+    for (final phase in live) {
+      onLive?.call(phase);
+      await Future<void>.delayed(phaseDelay);
+    }
+    return outcome;
   }
 }

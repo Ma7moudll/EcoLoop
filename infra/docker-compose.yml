@@ -1,0 +1,79 @@
+# EcoLoop / Recycle Vision — full local stack.
+#   docker compose -f infra/docker-compose.yml up --build
+#
+# The hardware simulator runs on the host (or the `simulator` profile below)
+# because it is the process that will become the real ESP32 firmware.
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: recycle
+      POSTGRES_PASSWORD: recycle
+      POSTGRES_DB: recycle_vision
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U recycle -d recycle_vision"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    healthcheck:
+      test: ["CMD", "mosquitto_sub", "-h", "localhost", "-t", "$SYS/#", "-C", "1", "-W", "3"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  ai-service:
+    build: ../ai-service
+    environment:
+      AI_SERVICE_CLASSIFIER: development   # switch to `real` once a model exists
+      AI_MODEL_PATH: ""
+    ports:
+      - "8051:8051"
+
+  backend:
+    build: ../backend
+    depends_on:
+      db:
+        condition: service_healthy
+      mosquitto:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg2://recycle:recycle@db:5432/recycle_vision
+      MQTT_BROKER_HOST: mosquitto
+      MQTT_BROKER_PORT: "1883"
+      AI_SERVICE_URL: http://ai-service:8051
+      SEED_ON_STARTUP: "true"
+      JWT_SECRET: change-me-in-production
+    ports:
+      - "8000:8000"
+
+  # Optional: run the simulated ESP32 inside Docker too.
+  #   docker compose -f infra/docker-compose.yml --profile simulator up simulator
+  simulator:
+    build:
+      context: ../hardware-simulator
+      dockerfile: Dockerfile
+    profiles: ["simulator"]
+    environment:
+      MQTT_BROKER_HOST: mosquitto
+      MQTT_BROKER_PORT: "1883"
+      STATION_ID: st-001
+      STATION_CODE: ST-001
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+
+volumes:
+  pgdata:

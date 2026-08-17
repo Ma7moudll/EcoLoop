@@ -140,13 +140,42 @@ class Station {
       };
 }
 
+/// Deposit lifecycle status. `pending` and the live phases (`routing` →
+/// `moving` → `ready` → `detecting` → `measuring`) mirror the machine's
+/// physical state streamed over WebSocket; the last four values are terminal
+/// outcomes the backend persists after the authoritative sensor event.
 enum DepositStatus {
   pending('pending'),
+  routing('routing'),
+  moving('moving'),
+  ready('ready'),
+  detecting('detecting'),
+  measuring('measuring'),
   confirmed('confirmed'),
-  rejected('rejected');
+  rejected('rejected'),
+  cancelled('cancelled'),
+  expired('expired');
 
   final String apiValue;
   const DepositStatus(this.apiValue);
+
+  /// A terminal outcome: points were either awarded (confirmed) or the
+  /// session closed without awarding anything.
+  bool get isTerminal =>
+      this == confirmed ||
+      this == rejected ||
+      this == cancelled ||
+      this == expired;
+
+  /// A live phase the machine is still working through (not yet terminal).
+  bool get isLive => !isTerminal;
+
+  static DepositStatus fromApi(String value) {
+    for (final status in DepositStatus.values) {
+      if (status.apiValue == value) return status;
+    }
+    throw ArgumentError.value(value, 'status', 'Unknown deposit status');
+  }
 }
 
 /// Deposit session + result, created & validated server-side.
@@ -193,12 +222,7 @@ class Deposit {
         mechanicalConfirmed: json['mechanical_confirmed'] as bool,
         potentialPoints: json['potential_points'] as int,
         pointsAwarded: json['points_awarded'] as int,
-        status:
-            json['status'] as String == 'pending'
-                ? DepositStatus.pending
-                : json['status'] == 'rejected'
-                    ? DepositStatus.rejected
-                    : DepositStatus.confirmed,
+        status: DepositStatus.fromApi(json['status'] as String),
         expiresAt: DateTime.parse(json['expires_at'] as String),
         rejectReason: json['reject_reason'] as String?,
       );

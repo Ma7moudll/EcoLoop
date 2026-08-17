@@ -41,6 +41,10 @@ class ApiClient {
 
   void setToken(String? token) => _token = token;
 
+  /// The currently held Bearer token (used by WebSocket auth, which cannot
+  /// send headers — it authenticates via `?token=` instead).
+  String? get token => _token;
+
   Future<Map<String, dynamic>> get(String path,
       {Map<String, dynamic>? query}) async {
     try {

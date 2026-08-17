@@ -1,4 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- The app talks to the Recycle Vision backend (AI predictions, deposit
+         sessions, WebSocket live status) — required in all build types. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="recycle_vision"
         android:name="${applicationName}"
