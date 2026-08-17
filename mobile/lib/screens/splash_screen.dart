@@ -27,11 +27,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       lowerBound: 0.85,
       upperBound: 1.0,
     )..repeat(reverse: true);
-    _bootstrap();
-  }
-
-  Future<void> _bootstrap() async {
-    await ref.read(sessionProvider.notifier).bootstrap();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(sessionProvider.notifier).bootstrap();
+    });
   }
 
   @override
