@@ -20,7 +20,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "ai-service"))
 
-from app.training.train import load_onnx_session, onnx_preprocess, onnx_forward  # noqa: E402
+from app.training.train import load_onnx_session  # noqa: E402
+from app.tools.preprocess import decode_image, to_model_input  # noqa: E402
 
 HIGH = 0.80
 MEDIUM = 0.50
@@ -51,12 +52,15 @@ def level(conf: float) -> str:
     return "LOW"
 
 
-def infer_local(session, path: Path):
+def infer_local(session, path: Path, model_path: Path):
     import numpy as np
     with open(path, "rb") as fh:
         blob = fh.read()
     t0 = time.perf_counter()
-    probs = onnx_forward(session, onnx_preprocess(blob))[0]
+    probs = session.run(
+        None,
+        {session.get_inputs()[0].name: to_model_input(decode_image(blob), model_path)},
+    )[0][0]
     elapsed_ms = (time.perf_counter() - t0) * 1000.0
     idx = int(np.argmax(probs).item())
     return probs, idx, elapsed_ms
@@ -101,7 +105,7 @@ def main() -> int:
     base = args.via_api.rstrip("/")
     ok = 0
     for path in images:
-        probs, idx, ms = infer_local(session, path)
+        probs, idx, ms = infer_local(session, path, model_path)
         raw = float(probs[idx])
         cal = float(temperature_scale(probs, T)[idx]) if T is not None else float("nan")
         cls = ["plastic", "metal", "paper", "other"][idx]
@@ -123,7 +127,7 @@ def main() -> int:
     if images:
         reps = []
         for _ in range(max(1, args.latency_run)):
-            _, _, ms = infer_local(session, images[0])
+            _, _, ms = infer_local(session, images[0], model_path)
             reps.append(ms)
         print(f"\nlatency (n={len(reps)}, {images[0].name}): "
               f"mean {sum(reps)/len(reps):.1f} ms, max {max(reps):.1f} ms")

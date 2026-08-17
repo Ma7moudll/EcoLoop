@@ -466,21 +466,22 @@ def main() -> None:
                f"start={start} now={points_now()}")
 
         # =========================================================================
-        # Scenario G — LOW CONFIDENCE: the real model is genuinely unsure, so
-        # the backend refuses to route (real AI, no force overrides).
+        # Scenario G — INPUT GATE: the synthetic grey frame that used to land
+        # at LOW confidence is now rejected BEFORE classification by the AI
+        # service's camera gate (real AI, no force overrides). No prediction
+        # is produced, so no deposit session can ever be created.
         # =========================================================================
         control.hold_seconds = 0.0
         control.plan = None
 
-        pred = predict_fixture("low_conf.png")
-        assert pred["confidence"] < 0.50, pred  # considered too weak to route
-        r = client.post(
-            "/api/v1/deposit/session", headers=headers,
-            json={"ai_prediction_id": pred["prediction_id"], "station_id": "st-001"},
+        rg = client.post(
+            "/api/v1/ai/predict", headers=headers,
+            files={"image": ("low_conf.png", _fixture_bytes("low_conf.png"), "image/png")},
         )
         record(
-            "Low confidence refused to route (422)",
-            r.status_code == 422, f"status={r.status_code} {r.text}",
+            "Input gate rejects grey frame (422) -> nothing routed",
+            rg.status_code == 422 and rg.json().get("code") == "LOW_QUALITY",
+            f"status={rg.status_code} {rg.text}",
         )
 
         # =========================================================================

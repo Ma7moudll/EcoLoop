@@ -31,7 +31,7 @@ cd ai-service
 | tier | what | what it proves |
 |---|---|---|
 | A — TrashNet benchmark | `reports/eval_report.md` | the served model on the academic dataset it was trained on |
-| B — simulated-station-pilot | `reports/dataset_report.md`, `calibration_report.md`, `finetune_report.md`, `model_compare.md`, `open_set_report.md` | the pipeline works end-to-end under simulated distribution shift |
+| B — simulated-station-pilot | `reports/dataset_report.md`, `calibration_report.md`, `finetune_report.md`, `model_compare.md`, `open_set_report.md`, `input_gate_report.md` | the pipeline works end-to-end under simulated distribution shift |
 | C — real station camera | **none yet** | — |
 
 **Real station-camera accuracy has NOT yet been established because no real
@@ -49,6 +49,36 @@ station-camera captures are currently available.**
 | `app.tools.train_finetune` | baseline vs fine-tuned model on the held-out pilot test → `reports/finetune_report.md` |
 | `app.tools.model_compare` | served MobileNetV3-Small vs SqueezeNet1.1 candidate → `reports/model_compare.md` |
 | `app.tools.open_set` | synthetic OOD false-acceptance at the backend thresholds → `reports/open_set_report.md` |
+| `app.tools.quality_gate` | camera/input quality gate + object-presence gate that run **before** classification (see below) |
+| `app.tools.preprocess` | the single deterministic preprocess (resize→center-crop→normalize) shared by probe, API and camera |
+| `app.tools.gate_report` | gate evaluation (false rejection / false acceptance / latency) → `reports/input_gate_report.md` |
+
+### The input gate (runs before the classifier)
+
+The deployed pipeline is:
+
+```
+Camera -> Input Quality Gate -> Object Presence Gate -> Preprocessing
+       -> Waste Classifier -> Calibration -> Routing
+```
+
+`InputQualityGate` (decode → dimensions → brightness/contrast/entropy →
+Laplacian-variance blur) rejects blank, dark, overexposed, flat, low-info,
+tiny and corrupt frames as `LOW_QUALITY`/`CORRUPT_IMAGE`. `ObjectPresenceDetector`
+then rejects empty frames (nothing in the centre of the frame) as `NO_OBJECT`.
+Only `VALID_FRAME` ever reaches the classifier. A rejected frame gets a
+structured 422 (`{"code": "NO_OBJECT"|"LOW_QUALITY"|"CORRUPT_IMAGE", ...}`)
+from the AI service; the backend passes the code through, persists nothing, and
+no deposit session can be created.
+
+> **Disclaimer:** The object-presence gate is a lightweight CV heuristic that
+> prevents obvious background/empty frames from reaching the classifier. It
+> does **not** establish real-world object-detection performance. Textured
+> backgrounds and edge-rich OOD frames can still pass it; the backend
+> confidence policy (<0.50 refused, 0.50–0.79 manual review) remains the
+> backstop, and `ObjectPresenceDetector` is the swap-in point for a real
+> detector later. See `reports/input_gate_report.md` for the honest
+> false-rejection / false-acceptance numbers and measured latencies.
 
 ### How a station capture should be collected
 
@@ -70,6 +100,7 @@ cd ai-service
 ../.venv/bin/python -m app.tools.train_finetune
 ../.venv/bin/python -m app.tools.model_compare
 ../.venv/bin/python -m app.tools.open_set
+../.venv/bin/python -m app.tools.gate_report
 ../.venv/bin/python -m app.training.train --eval-only   # refresh the A-tier baseline
 ../../scripts/test_real_camera.py --folder <capture-folder>
 ```
@@ -90,8 +121,12 @@ cd ai-service
 A fixed camera sees background-only frames (empty tray, hands, bin edges).
 The classifier is trained only on waste objects; the open-set probe measures
 how often such frames would pass the backend policy thresholds. On the live
-system the camera's motion/object-detection stage should gate what reaches
-the classifier — the classifier alone is not a detector.
+system the **input quality + object-presence gate** (`app.tools.quality_gate`)
+now runs before classification and rejects obvious blank/empty/background
+frames — see `reports/input_gate_report.md`. The gate is deliberately
+balanced (permissive on real waste, false-rejection 0% on the pilot test) and
+is **not** a real object detector; the classifier confidence policy and a
+future detection stage remain the depth layers of defence.
 
 ## Model swap discipline
 

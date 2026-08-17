@@ -46,7 +46,7 @@ The HTTP layer can create and cancel deposit sessions, but `POST
 | Flutter app | `mobile/` | UI; kept the existing design system; `OFFLINE_MODE` fallback preserved |
 | Shared models | `shared/` | Dart `Prediction`, `Deposit`, `AppUser`, … wire contract |
 | Backend | `backend/` | FastAPI, SQLAlchemy 2, Alembic; all business rules |
-| AI service | `ai-service/` | standalone classifier over HTTP; `development` or `real` mode |
+| AI service | `ai-service/` | standalone classifier over HTTP; `development` or `real` mode; input quality + object-presence gate before classification |
 | AI validation | `ai-service/app/tools/` | data collection + model validation pipeline for the station-top camera (see `docs/ai-validation.md`) |
 | Hardware simulator | `hardware-simulator/` | the future ESP32, speaking the MQTT contract |
 | Infra | `infra/` | docker-compose, mosquitto config, Postgres bootstrap |
@@ -54,9 +54,20 @@ The HTTP layer can create and cancel deposit sessions, but `POST
 
 ## Backend flow (a deposit)
 
-1. `POST /api/v1/ai/predict` (multipart image) → AI service → DB routing policy →
-   persisted `ai_predictions` row → wire `Prediction` (with `confidence_level`,
+1. `POST /api/v1/ai/predict` (multipart image) → AI service **camera gate**
+   (quality + object presence) → classifier → DB routing policy → persisted
+   `ai_predictions` row → wire `Prediction` (with `confidence_level`,
    `destination_position`, `potential_points`, `expires_at`).
+
+   A frame the AI service rejects at its gate (`NO_OBJECT` / `LOW_QUALITY` /
+   `CORRUPT_IMAGE`) is passed through as a structured 422 by the backend,
+   **no prediction is persisted and no deposit session can be created**:
+   `Camera -> Quality Gate -> Object Presence Gate -> Preprocessing ->
+   Waste Classifier -> Calibration -> Routing`. The gate is a lightweight CV
+   heuristic (see `reports/input_gate_report.md`); it keeps blank/empty frames
+   out of the classifier but does **not** establish real object-detection
+   performance — the confidence policy below and a future detection stage
+   remain the backstop.
 2. `POST /api/v1/deposit/session` with `{ai_prediction_id, station_id}` →
    mints `OP-YYYYMMDD-NNNNNN` (locked counter) → creates `deposit_session`
    (status `pending`, TTL) → publishes MQTT `route` command to the station.
@@ -111,9 +122,10 @@ ai-service, the real backend on **PostgreSQL**, and an in-process simulator
 plus a real WebSocket client, then runs every scenario over HTTP+MQTT+WS and
 sweeps the database. It asserts 30 checks (exactly 2 paid events, no duplicate
 awards, expired/cancelled/rejected award 0, WS auth gate 4401, medium-conf
-manual routing never awards points). Running it against real Postgres also
-surfaced and fixed two dialect bugs that SQLite-only tests could not: aware-vs-
-naive datetime handling and a `numpy.float32` confidence serialization crash.
+manual routing never awards points, and the AI input gate rejecting a
+synthetic grey frame). Running it against real Postgres also surfaced and fixed
+two dialect bugs that SQLite-only tests could not: aware-vs-naive datetime
+handling and a `numpy.float32` confidence serialization crash.
 
 ## Confidence policy (backend-enforced)
 

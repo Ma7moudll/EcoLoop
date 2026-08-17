@@ -25,9 +25,6 @@ from .base import ClassificationResult, WasteClassifier
 # Adversarial classes the service can never report.
 VALID = {"plastic", "metal", "paper", "other"}
 DEFAULT_CLASSES = ("plastic", "metal", "paper", "other")
-DEFAULT_GEOMETRY = {"input_size": 224, "resize": 256}
-DEFAULT_MEAN = (0.485, 0.456, 0.406)
-DEFAULT_STD = (0.229, 0.224, 0.225)
 
 
 class ModelNotReadyError(RuntimeError):
@@ -135,28 +132,13 @@ class RealInferenceClassifier(WasteClassifier):
         )
 
     def _preprocess(self, image: PIL.Image.Image) -> np.ndarray:
-        """Resize -> center-crop -> normalize -> NCHW. Geometry and
-        normalization are read from preprocess.json and therefore match the
-        training pipeline exactly (see app/training/train.py)."""
-        size = DEFAULT_GEOMETRY["input_size"]
-        resize = DEFAULT_GEOMETRY["resize"]
-        mean = np.asarray(DEFAULT_MEAN, dtype=np.float32)
-        std = np.asarray(DEFAULT_STD, dtype=np.float32)
+        """Shared deterministic preprocess: resize -> center-crop -> normalize
+        -> NCHW. Delegates to `app.tools.preprocess.to_model_input` so the
+        deployed API and the camera probe use byte-identical pixel math (see
+        docs/ai-validation.md)."""
+        from ..tools.preprocess import to_model_input
 
-        meta = self.model_path.with_name("preprocess.json")
-        if meta.exists():
-            data = json.loads(meta.read_text(encoding="utf-8"))
-            size = int(data.get("input_size", size))
-            resize = int(data.get("resize", resize))
-            mean = np.asarray(data.get("mean", DEFAULT_MEAN), dtype=np.float32)
-            std = np.asarray(data.get("std", DEFAULT_STD), dtype=np.float32)
-
-        resized = image.resize((resize, resize))
-        offset = (resize - size) // 2
-        resized = resized.crop((offset, offset, offset + size, offset + size))
-        arr = np.asarray(resized, dtype=np.float32) / 255.0
-        arr = (arr - mean) / std
-        return np.transpose(arr, (2, 0, 1))[None, ...]
+        return to_model_input(image, self.model_path)
 
     def _forward(self, tensor: np.ndarray) -> np.ndarray:
         if self.backend_name == "onnx":

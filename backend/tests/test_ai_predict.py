@@ -80,6 +80,56 @@ def test_unknown_class_rejected(client, demo_session, monkeypatch):
     assert r.status_code == 422
 
 
+def test_gate_rejection_passthrough(client, auth, monkeypatch):
+    """A gate-rejected frame (NO_OBJECT / LOW_QUALITY / CORRUPT_IMAGE) from
+    the AI service becomes a structured 422 with a machine-readable code and a
+    user-facing `error` — so no prediction is persisted and no deposit session
+    can be created, and the mobile app can show the right retake message."""
+    from app.routers import ai as ai_router
+    from app.services.ai_client import AiGateRejection
+
+    class _Rejecting:
+        def predict(self, *args, **kwargs):
+            raise AiGateRejection(
+                "LOW_QUALITY",
+                "Image quality is too low. Move closer or improve the lighting.",
+            )
+
+    monkeypatch.setattr(ai_router, "PredictService", _Rejecting)
+    r = client.post(
+        "/api/v1/ai/predict",
+        headers=auth,
+        files={"image": ("grey.jpg", b"data", "image/jpeg")},
+    )
+    assert r.status_code == 422
+    body = r.json()
+    assert body["code"] == "LOW_QUALITY"
+    assert "improve the lighting" in body["error"]
+
+
+def test_gate_rejection_no_prediction_persisted(client, auth, monkeypatch):
+    """Gate rejections must not leave any ai_prediction row behind."""
+    from app.routers import ai as ai_router
+    from app.services.ai_client import AiGateRejection
+    from app.models import AiPrediction
+
+    class _Rejecting:
+        def predict(self, *args, **kwargs):
+            raise AiGateRejection("NO_OBJECT", "No waste detected.")
+
+    monkeypatch.setattr(ai_router, "PredictService", _Rejecting)
+    r = client.post(
+        "/api/v1/ai/predict",
+        headers=auth,
+        files={"image": ("bg.jpg", b"data", "image/jpeg")},
+    )
+    assert r.status_code == 422
+    from app.database import SessionLocal
+
+    with SessionLocal() as db:
+        assert db.query(AiPrediction).count() == 0, "gate rejection must not persist a prediction"
+
+
 def test_predict_requires_auth(client):
     r = client.post(
         "/api/v1/ai/predict",

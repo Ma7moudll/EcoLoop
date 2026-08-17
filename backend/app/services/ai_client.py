@@ -9,6 +9,21 @@ class AiWireError(RuntimeError):
     """The AI service could not be reached or returned an unexpected shape."""
 
 
+# Codes the AI service returns for frames rejected by its camera gate.
+GATE_REJECT_CODES = {"NO_OBJECT", "LOW_QUALITY", "CORRUPT_IMAGE"}
+
+
+class AiGateRejection(AiWireError):
+    """The AI service rejected the frame at its input gate (before any
+    classification): NO_OBJECT / LOW_QUALITY / CORRUPT_IMAGE. Carries the
+    machine-readable code so the backend can surface the right retake flow."""
+
+    def __init__(self, code: str, detail: str) -> None:
+        super().__init__(f"{code}: {detail}")
+        self.code = code
+        self.detail = detail
+
+
 class AiExternalPrediction:
     __slots__ = ("predicted_class", "confidence", "model")
 
@@ -39,6 +54,14 @@ class AiServiceClient:
         except httpx.HTTPError as exc:
             raise AiWireError(f"AI service unreachable: {exc}") from exc
         if response.status_code != 200:
+            # Gate rejections carry a structured body -> typed, pass-through-able.
+            try:
+                body = response.json()
+            except ValueError:
+                body = {}
+            code = str(body.get("code", ""))
+            if code in GATE_REJECT_CODES:
+                raise AiGateRejection(code, str(body.get("detail", "")))
             raise AiWireError(f"AI service error {response.status_code}: {response.text[:200]}")
         data = response.json()
         try:

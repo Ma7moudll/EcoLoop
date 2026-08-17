@@ -199,7 +199,8 @@ class TestHttpContract:
         from app.main import app
 
         with TestClient(app) as c:
-            r = c.post("/predict", files={"image": ("capture.jpg", _image_jpeg((20, 40, 200)), "image/jpeg")})
+            # A real waste frame (passes the camera gate) keeps the wire shape.
+            r = c.post("/predict", files={"image": ("capture.png", _fixture("high_conf_plastic.png"), "image/png")})
             assert r.status_code == 200
             body = r.json()
             assert body["predicted_class"] in ("plastic", "metal", "paper", "other")
@@ -215,6 +216,7 @@ class TestHttpContract:
         with TestClient(app) as c:
             r = c.post("/predict", files={"image": ("empty.jpg", b"", "image/jpeg")})
             assert r.status_code == 422
+            assert r.json()["code"] == "CORRUPT_IMAGE"
 
     def test_corrupt_image_rejected_422_not_500(self):
         from fastapi.testclient import TestClient
@@ -225,3 +227,25 @@ class TestHttpContract:
         with TestClient(app) as c:
             r = c.post("/predict", files={"image": ("corrupt.jpg", junk, "image/jpeg")})
             assert r.status_code == 422, r.text
+            assert r.json()["code"] == "CORRUPT_IMAGE"
+
+    def test_gate_rejects_grey_frame_before_classifier(self):
+        from fastapi.testclient import TestClient
+
+        from app.main import app
+
+        grey = _image_jpeg((128, 128, 128))
+        with TestClient(app) as c:
+            r = c.post("/predict", files={"image": ("grey.jpg", grey, "image/jpeg")})
+            assert r.status_code == 422, r.text
+            assert r.json()["code"] in ("NO_OBJECT", "LOW_QUALITY")
+
+    def test_gate_rejects_blank_black_frame(self):
+        from fastapi.testclient import TestClient
+
+        from app.main import app
+
+        with TestClient(app) as c:
+            r = c.post("/predict", files={"image": ("black.jpg", _image_jpeg((0, 0, 0)), "image/jpeg")})
+            assert r.status_code == 422
+            assert r.json()["code"] == "LOW_QUALITY"
