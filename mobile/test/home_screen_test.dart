@@ -29,6 +29,15 @@ void main() {
     expect(find.textContaining('Test'), findsWidgets); // greeting
     expect(find.text('60'), findsOneWidget); // points from server
     expect(find.text('Probably Plastic'), findsOneWidget); // history row
+    expect(find.text('Recycle now'), findsOneWidget); // CTA
+    expect(find.text('0.6 kg'), findsOneWidget); // impact recycled kg
+
+    // The challenge card lives lower in the lazy list; scroll to reveal it.
+    await tester.scrollUntilVisible(
+      find.text('Plastic Race'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(find.text('Plastic Race'), findsOneWidget); // challenge
   });
 }

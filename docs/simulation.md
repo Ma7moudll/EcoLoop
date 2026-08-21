@@ -46,22 +46,15 @@ Env knobs: `MQTT_BROKER_HOST/PORT`, `MQTT_USERNAME/PASSWORD`, `STATION_ID`,
 
 ## Running the whole stack
 
-Without Docker (current dev default):
+Without Docker (current dev default) — use the one-command launcher:
 
 ```bash
-# 1. broker
-/opt/homebrew/sbin/mosquitto -c infra/mosquitto/mosquitto.conf
-
-# 2. AI service (venv shared with backend)
-PYTHONPATH=ai-service .venv/bin/uvicorn app.main:app --port 8051
-
-# 3. backend (SQLite for zero-dependency, or Postgres)
-PYTHONPATH=backend DATABASE_URL=sqlite:///./recycle.db MQTT_BROKER_HOST=localhost \
-  .venv/bin/uvicorn app.main:app --port 8000
-
-# 4. simulator
-cd hardware-simulator && python simulator.py
+scripts/dev_up.sh        # local Postgres + mosquitto :1884 + ai-service :8051 (real ONNX) + backend :8080 (no demo user)
+scripts/dev_health.sh    # 5 health checks incl. a real AI round-trip
 ```
+
+Manual equivalent (legacy, SQLite/Postgres — see `scripts/dev_up.sh` for the
+real production-shaped stack):
 
 With Docker (daemon running):
 
@@ -76,28 +69,30 @@ docker compose -f infra/docker-compose.yml --profile simulator up simulator
 `scripts/e2e_real_chain.py` runs the entire chain against **real services**
 (no TestClient): a spawned mosquitto on 1884, the ai-service on 8051 **serving
 the trained ONNX model**, the backend on 8080 wired to a real PostgreSQL
-database, an in-process simulator acting as the ESP32, and a real WebSocket
-client. It drives the valid deposit plus wrong-position, underweight, expired,
-cancelled, duplicate-terminal, low-confidence and medium-confidence scenarios
-over HTTP+MQTT+WS, then sweeps the database (exactly 2 paid events, no
-duplicate rows, rejected/expired award 0, final balance 45+5+5). The confidence
-scenarios use **real model scores** on curated fixture images — the ai-service
-is started with `DEVELOPMENT_FORCE_*` poison values to prove the production
-path ignores them. Requires local PostgreSQL (`recycle`/`recycle`, database
-`recycle_vision_e2e`) and free ports 1884/8051/8080.
+database, an in-process simulator acting as the ESP32 + STATION camera, and a
+real WebSocket client. It drives the valid deposit plus wrong-position,
+underweight, expired, cancelled, duplicate-terminal, gate-rejected,
+medium-confidence and **Scenario I (station-camera capture-first path)** over
+HTTP+MQTT+WS, then sweeps the database (exactly 3 paid events, no duplicate
+rows, rejected/expired/cancelled award 0, final balance 45+5+5+5=60). The
+confidence scenarios use **real model scores** on curated fixture images — the
+ai-service is started with `DEVELOPMENT_FORCE_*` poison values to prove the
+production path ignores them. Requires local PostgreSQL (`recycle`/`recycle`,
+database `recycle_vision_e2e`, schema at alembic head) and free ports
+1884/8051/8080.
 
 ```bash
 .venv/bin/python scripts/e2e_real_chain.py
-# RESULT: 30 passed, 0 failed
+# RESULT: 37 passed, 0 failed
 ```
 
 ## Tests
 
 ```bash
-cd backend && PYTHONPATH=. .venv/bin/python -m pytest tests -q     # 57 tests
-cd hardware-simulator && SIMULATOR_RAMP_STEP=0 .venv/bin/python -m pytest tests -q  # 27
-cd ai-service && PYTHONPATH=. .venv/bin/python -m pytest tests -q  # 52 (incl. pipeline tools)
-cd mobile && flutter test                                          # 27 widget/unit
+cd backend && PYTHONPATH=. .venv/bin/python -m pytest tests -q     # 79 tests
+cd hardware-simulator && SIMULATOR_RAMP_STEP=0 .venv/bin/python -m pytest tests -q  # 30
+cd ai-service && PYTHONPATH=. .venv/bin/python -m pytest tests -q  # 82 (incl. pipeline + real-model security)
+cd mobile && flutter test                                          # 29 widget/unit (analyze clean)
 ```
 
 The ai-service suite now includes the data-collection / model-validation
@@ -108,9 +103,13 @@ See `docs/ai-validation.md` for the pipeline itself.
 
 The integration tests in `backend/tests/integration` spawn a real mosquitto and
 drive the whole chain: predict → session → MQTT route command → simulator
-physics → backend validation → points in Postgres/SQLite. The mobile suite
-covers the WebSocket live-phase rendering, the polling fallback, and every
-terminal outcome.
+physics → backend validation → points in Postgres/SQLite. The backend capture
+suite (`backend/tests/test_capture.py`) proves the FINAL station-camera path:
+capture-first session, `capture_request`, station-key-gated capture (401 on
+missing/wrong key), gate-rejection retake, AI-outage 503 retake, station
+mismatch, and the physical-event completion that still gates all points. The
+mobile suite covers the WebSocket live-phase rendering, the polling fallback,
+and every terminal outcome.
 
 ## AI data collection & model validation
 

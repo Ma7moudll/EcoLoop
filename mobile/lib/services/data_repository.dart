@@ -47,6 +47,15 @@ class DataRepository {
         .map((e) => LeaderEntry.fromJson(e as Map<String, dynamic>))
         .toList();
   }
+
+  /// Live EcoLoop stations. The user scans/uploads a station QR then deposits
+  /// against its station_code; the station camera does the classifying.
+  Future<List<Station>> fetchStations() async {
+    final body = await _api.get('/stations');
+    return (body['items'] as List<dynamic>)
+        .map((e) => Station.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
 }
 
 enum LeaderScope {
@@ -59,19 +68,19 @@ enum LeaderScope {
 
 /// Deposit session + live status. Points are ONLY ever awarded server-side
 /// after a physical MQTT sensor event; the client polls [awaitDeposit] until
-/// the station (or, in offline preview, its simulation) reaches a terminal
-/// state. There is deliberately no HTTP confirm shortcut — the backend has no
-/// such route, and points can never come from the client.
+/// the station reaches a terminal state. There is deliberately no HTTP confirm
+/// shortcut — the backend has no such route, and points can never come from
+/// the client.
 class DepositRepository {
   final ApiClient _api;
 
   DepositRepository(this._api);
 
   Future<Deposit> createSession(
-      {required String predictionId,
-      required String stationId}) async {
+      {String? predictionId, required String stationId}) async {
     final body = await _api.post('/deposit/session', data: {
-      'ai_prediction_id': predictionId,
+      if (predictionId != null && predictionId.isNotEmpty)
+        'ai_prediction_id': predictionId,
       'station_id': stationId,
     });
     return Deposit.fromJson(body);
@@ -86,10 +95,9 @@ class DepositRepository {
     await _api.post('/deposit/$operationId/cancel');
   }
 
-  /// Waits for the deposit to reach a terminal state. In online mode this
-  /// polls the real backend until the physical station finishes the drop; in
-  /// offline preview the simulated station resolves immediately. Points come
-  /// only from the returned deposit — never fabricated here.
+  /// Waits for the deposit to reach a terminal state, polling the real backend
+  /// until the physical station finishes the drop. Points come only from the
+  /// returned deposit — never fabricated here.
   Future<({Deposit deposit, int pointsAwarded, int challengeBonus})> awaitDeposit(
     Deposit session, {
     Duration pollInterval = const Duration(seconds: 2),

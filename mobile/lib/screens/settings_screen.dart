@@ -27,13 +27,6 @@ class SettingsScreen extends ConsumerWidget {
           _Group(
             title: 'App',
             children: [
-              _SwitchTile(
-                icon: Icons.science_outlined,
-                title: 'Demo mode',
-                subtitle: 'Simulated AI + station responses from the backend.',
-                value: AppConfig.demoMode,
-                onChanged: (_) {}, // read-only in MVP
-              ),
               _InfoTile(
                 icon: Icons.dns_outlined,
                 title: 'API server',
@@ -169,55 +162,6 @@ class _InfoTile extends StatelessWidget {
               ],
             ),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SwitchTile extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final bool value;
-  final ValueChanged<bool> onChanged;
-
-  const _SwitchTile({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.value,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      child: Row(
-        children: [
-          Icon(icon, size: 18, color: AppColors.green),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.foreground,
-                  ),
-                ),
-                Text(
-                  subtitle,
-                  style: const TextStyle(fontSize: 10.5, color: AppColors.muted),
-                ),
-              ],
-            ),
-          ),
-          Switch(value: value, onChanged: onChanged),
         ],
       ),
     );

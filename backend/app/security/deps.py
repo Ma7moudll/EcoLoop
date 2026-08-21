@@ -9,6 +9,7 @@ from ..config import settings
 from ..database import get_db
 from ..models import User
 from .jwt import decode_access_token
+from .revocation import revocations
 
 _bearer = HTTPBearer(auto_error=False)
 
@@ -23,7 +24,16 @@ def get_current_user(
         payload = decode_access_token(credentials.credentials, settings.jwt_secret)
     except Exception:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
+    if revocations.is_revoked(str(payload.get("jti", ""))):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token revoked")
     user = db.get(User, payload["sub"])
     if user is None or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    return user
+
+
+def require_admin(user: User = Depends(get_current_user)) -> User:
+    """Gates management endpoints to `role == "admin"`."""
+    if user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
     return user

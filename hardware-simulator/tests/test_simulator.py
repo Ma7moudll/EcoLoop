@@ -153,6 +153,105 @@ class TestCommandDispatch:
         assert terminals(sim.mqtt.published) == []
 
 
+class TestCaptureRequestDispatch:
+    def test_capture_request_uploads_real_frame(self, make_sim, tmp_path):
+        """The capture_request command makes the simulated station camera upload
+        a real frame (from ai-service data) to the backend capture endpoint;
+        no terminal is emitted and no route executes yet."""
+        from camera import CaptureUploader
+
+        plastic_dir = tmp_path / "plastic"
+        plastic_dir.mkdir()
+        (plastic_dir / "frame-a.jpg").write_bytes(b"\xff\xd8fake-jpeg-1")
+        (plastic_dir / "frame-b.jpg").write_bytes(b"\xff\xd8fake-jpeg-2")
+
+        cfg = SimConfig()
+        cfg.capture_dir = tmp_path
+        cfg.sim_capture_class = "plastic"
+        cfg.backend_url = "http://capture.test"
+
+        captured = {}
+
+        def fake_post(url, files=None, data=None, headers=None):
+            captured.update(
+                {
+                    "url": url,
+                    "image": files["image"][1],
+                    "operation_id": data["operation_id"],
+                    "station_code": data["station_code"],
+                    "key": headers["X-Station-Key"],
+                }
+            )
+            return _FakeResp(200, '{"status":"analyzing"}')
+
+        cam = CaptureUploader(cfg, client=_FakeClient(fake_post))
+        cfg.backend_url = "http://capture.test"
+        sim = EcoLoopSimulator(config=cfg, mqtt=FakeMqtt(), capture_uploader=cam)
+        sim._on_command({"command": "capture_request", "operation_id": "OP-CAP-1"})
+
+        assert captured["url"] == "http://capture.test/api/v1/deposit/capture"
+        assert captured["operation_id"] == "OP-CAP-1"
+        assert captured["station_code"] == "ST-001"
+        assert captured["key"] == "dev-station-key"
+        assert captured["image"].startswith(b"\xff\xd8fake-jpeg-")  # real frame bytes
+        assert terminals(sim.mqtt.published) == []  # capture never awards points
+        assert len(cam.pick_frame()) > 0
+
+    def test_capture_request_cycles_frames(self, make_sim, tmp_path):
+        from camera import CaptureUploader
+
+        d = tmp_path / "metal"
+        d.mkdir()
+        (d / "m1.jpg").write_bytes(b"\xff\xd8one")
+        (d / "m2.jpg").write_bytes(b"\xff\xd8two")
+
+        cfg = SimConfig()
+        cfg.capture_dir = tmp_path
+        cfg.sim_capture_class = "metal"
+
+        seen = []
+
+        def fake_post(url, files=None, data=None, headers=None):
+            seen.append(files["image"][1])
+            return _FakeResp(200, '{}')
+
+        cam = CaptureUploader(cfg, client=_FakeClient(fake_post))
+        for _ in range(3):
+            cam.upload("OP-X")
+        assert seen[0] == b"\xff\xd8one"
+        assert seen[1] == b"\xff\xd8two"
+        assert seen[2] == b"\xff\xd8one"
+
+    def test_missing_frames_raises(self, tmp_path):
+        from camera import CaptureUploader
+
+        cfg = SimConfig()
+        empty = tmp_path / "plastic"
+        empty.mkdir()
+        cfg.capture_dir = tmp_path
+        cfg.sim_capture_class = "plastic"
+        cam = CaptureUploader(cfg, client=_FakeClient(lambda *a, **k: None))
+        try:
+            cam.pick_frame()
+            raise AssertionError("expected FileNotFoundError")
+        except FileNotFoundError as exc:
+            assert "no frames" in str(exc)
+
+
+class _FakeResp:
+    def __init__(self, status_code, text):
+        self.status_code = status_code
+        self.text = text
+
+
+class _FakeClient:
+    def __init__(self, post):
+        self._post = post
+
+    def post(self, url, files=None, data=None, headers=None):
+        return self._post(url, files=files, data=data, headers=headers)
+
+
 def test_timeout_scenario_sleeps_before_terminal(make_sim):
     """The timeout scenario completes the deposit but the terminal fires after
     a delay — the backend (with a shorter TTL) must reject it as expired."""

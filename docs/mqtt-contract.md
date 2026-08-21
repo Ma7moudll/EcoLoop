@@ -26,6 +26,22 @@ A single station = one physical unit with **four internal compartments**
 The simulator executes the physical plan and reports what physically happened.
 It never echoes the command as "success".
 
+## Capture request (backend → station, FINAL station-camera path)
+
+Sent on the same `command` topic when a session is created **without** an
+`ai_prediction_id` (capture-first). The station camera responds by uploading
+its frame to `POST /api/v1/deposit/capture`:
+
+```json
+{"command": "capture_request", "operation_id": "OP-20260817-000002"}
+```
+
+The backend then classifies the frame and, per the confidence policy (HIGH auto
+/ MEDIUM manual / LOW rejected), publishes the normal `route` command (or the
+gate returns `422 {code, error}` and the session returns to `capture` for a
+retake). The phone never snaps a photo — the station camera is the only
+classification source.
+
 ## Terminal event (station → backend)
 
 Published on `event` with `event: "deposit_result"` — this is the payload the
@@ -63,7 +79,11 @@ state change ever touches points.
 
 ## End-to-end deposit sequence
 
-1. `POST /api/v1/deposit/session` → backend publishes `route` command.
+1. `POST /api/v1/deposit/session` — without `ai_prediction_id` the backend
+   publishes `capture_request`; the station camera uploads a frame to
+   `POST /api/v1/deposit/capture`, the backend runs the real AI, and then
+   publishes `route` (automatic or manual). With `ai_prediction_id` (legacy
+   path) `route` is published immediately.
 2. Simulator: `ROUTING`, `MOVING` (per-step `sensor` telemetry with
    `carriage_position`), `POSITIONED`, `READY_FOR_DEPOSIT`.
 3. `DETECTING` (beam breaks), `MEASURING` (weight ramp, `weight_stable` at

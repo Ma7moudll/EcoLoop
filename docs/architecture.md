@@ -9,7 +9,7 @@ hardware.
 ```
 ┌──────────────┐   REST (HTTPS)    ┌──────────────────┐  HTTP   ┌───────────────┐
 │  Flutter app │ ────────────────▶ │ FastAPI backend  │ ──────▶ │  AI service   │
-│  (iOS/Android)│                    │  (uvicorn)        │   /predict  (classifier)│
+│  (iOS/Android)│  /session,status │  (uvicorn)        │  /predict  (classifier)│
 └──────────────┘                    │  + PostgreSQL     │         └───────────────┘
         ▲                          └──────────────────┘
         │  WebSocket  /ws/deposits/{operation_id}
@@ -19,14 +19,15 @@ hardware.
 ┌──────────────────────────────┐
 │  MQTT broker (mosquitto)     │
 └──────────────────────────────┘
-        ▲
-        │ publish sensor / state / deposit_result
-        │ subscribe .../command
-┌──────────────────────────────┐
-│  Hardware simulator (ESP32)  │   ← becomes real firmware, unchanged contract
-│  carriage · load cell · IR   │
-│  beam · position · machine   │
-└──────────────────────────────┘
+        ▲                              ▲
+        │ publish sensor/state/        │ capture_request
+        │ deposit_result               │ (command topic)
+┌──────────────────────────────┐   ┌──────────────────────────────┐
+│  Hardware simulator (ESP32)  │   │  Station camera              │
+│  carriage · load cell · IR   │   │  ──POST /deposit/capture──▶  backend
+│  beam · position · machine   │   │  (FINAL classification       │
+└──────────────────────────────┘   │   source; phone never snaps) │
+                                   └──────────────────────────────┘
 ```
 
 ## The single most important rule
@@ -35,15 +36,18 @@ hardware.
 > `deposit_result` MQTT event. The client can never award points. The
 > simulator never declares success — it only reports physics.
 
-The HTTP layer can create and cancel deposit sessions, but `POST
-/deposit/session` and `POST /deposit/callback/event` go through the exact same
-`DepositService.complete_from_event` pipeline. Both enter the same transaction.
+The HTTP layer can create and cancel deposit sessions. The **HTTP callback** path
+(`POST /deposit/callback/event`) is internet-reachable, so it requires
+`X-Station-Key` (same shared secret as the capture endpoint) before it runs the
+`DepositService.complete_from_event` pipeline. The primary completion path is
+the MQTT `deposit_result` event (broker-internal trust boundary). Both enter
+the same transaction.
 
 ## Components
 
 | Component | Location | Role |
 |---|---|---|
-| Flutter app | `mobile/` | UI; kept the existing design system; `OFFLINE_MODE` fallback preserved |
+| Flutter app | `mobile/` | UI; always talks to the real backend — no offline/demo fallback, errors surface honestly |
 | Shared models | `shared/` | Dart `Prediction`, `Deposit`, `AppUser`, … wire contract |
 | Backend | `backend/` | FastAPI, SQLAlchemy 2, Alembic; all business rules |
 | AI service | `ai-service/` | standalone classifier over HTTP; `development` or `real` mode; input quality + object-presence gate before classification |
@@ -54,24 +58,23 @@ The HTTP layer can create and cancel deposit sessions, but `POST
 
 ## Backend flow (a deposit)
 
-1. `POST /api/v1/ai/predict` (multipart image) → AI service **camera gate**
-   (quality + object presence) → classifier → DB routing policy → persisted
-   `ai_predictions` row → wire `Prediction` (with `confidence_level`,
-   `destination_position`, `potential_points`, `expires_at`).
+The **FINAL architecture makes the STATION camera the classification source** —
+the phone only identifies the station (QR / code / list) and watches status:
 
-   A frame the AI service rejects at its gate (`NO_OBJECT` / `LOW_QUALITY` /
-   `CORRUPT_IMAGE`) is passed through as a structured 422 by the backend,
-   **no prediction is persisted and no deposit session can be created**:
-   `Camera -> Quality Gate -> Object Presence Gate -> Preprocessing ->
-   Waste Classifier -> Calibration -> Routing`. The gate is a lightweight CV
-   heuristic (see `reports/input_gate_report.md`); it keeps blank/empty frames
-   out of the classifier but does **not** establish real object-detection
-   performance — the confidence policy below and a future detection stage
-   remain the backstop.
-2. `POST /api/v1/deposit/session` with `{ai_prediction_id, station_id}` →
-   mints `OP-YYYYMMDD-NNNNNN` (locked counter) → creates `deposit_session`
-   (status `pending`, TTL) → publishes MQTT `route` command to the station.
+1. `POST /api/v1/deposit/session` **without** `ai_prediction_id` → mints
+   `OP-YYYYMMDD-NNNNNN` (locked counter) → creates `deposit_session`
+   (status `capture`, TTL) → publishes MQTT `capture_request` to the station.
    **No points here.**
+2. The station camera uploads its frame: `POST /api/v1/deposit/capture`
+   (`X-Station-Key` + multipart `image`/`operation_id`/`station_code`). The
+   backend runs the real AI (camera gate → classifier → routing policy) and
+   persists the prediction onto the session (`analyzing` while classifying).
+   - A rejected frame (`NO_OBJECT` / `LOW_QUALITY` / `CORRUPT_IMAGE`) returns a
+     structured `422 {code, error}` and the session returns to `capture` for a
+     retake — nothing is routed.
+   - Otherwise, per the confidence policy, the backend publishes the MQTT
+     `route` command (HIGH auto / MEDIUM manual). **The capture endpoint can
+     never award points.**
 3. The station (simulator/firmware) executes the deposit: moves the carriage,
    reads the load cell, crosses the IR beam, and publishes a terminal
    `deposit_result` event.
@@ -87,6 +90,11 @@ The HTTP layer can create and cancel deposit sessions, but `POST
    `points_transaction.award_points`) inserts the `waste_event`, updates the
    user's points, upserts student + faculty leaderboard rows, and marks the
    session `confirmed`. A failure rolls everything back — no double-spend.
+
+Legacy phone-camera path (for reference): `POST /ai/predict` → then
+`POST /deposit/session` with `ai_prediction_id` → routes immediately. Both
+session paths converge on the identical validation pipeline below; awarding
+points is impossible through either HTTP entry point.
 
 Rejections still persist an auditable `waste_event` row with `0` points and a
 `reject_reason`. Duplicate terminal events for the same operation are ignored
@@ -120,12 +128,16 @@ a token is missing. Either path converges on the identical terminal `Deposit`.
 `scripts/e2e_real_chain.py` starts the **real** mosquitto broker, the real
 ai-service, the real backend on **PostgreSQL**, and an in-process simulator
 plus a real WebSocket client, then runs every scenario over HTTP+MQTT+WS and
-sweeps the database. It asserts 30 checks (exactly 2 paid events, no duplicate
-awards, expired/cancelled/rejected award 0, WS auth gate 4401, medium-conf
-manual routing never awards points, and the AI input gate rejecting a
-synthetic grey frame). Running it against real Postgres also surfaced and fixed
-two dialect bugs that SQLite-only tests could not: aware-vs-naive datetime
-handling and a `numpy.float32` confidence serialization crash.
+sweeps the database. It asserts 38 checks across 8 deposit scenarios —
+including the FINAL station-camera path (session created capture-first, the
+harness standing in for the station camera uploads a real frame to
+`/deposit/capture`, the backend runs the real AI and routes automatically
+before the physical drop) — with exactly 3 paid events, no duplicate awards,
+expired/cancelled/rejected award 0, WS auth gate 4401, medium-conf manual
+routing never awards points, and the AI input gate rejecting a synthetic grey
+frame. Running it against real Postgres also surfaced and fixed two dialect
+bugs that SQLite-only tests could not: aware-vs-naive datetime handling and a
+`numpy.float32` confidence serialization crash.
 
 ## Confidence policy (backend-enforced)
 
@@ -155,8 +167,45 @@ Driven by the `routing_policy` DB table, not hardcoded.
   missing — the system never pretends an untrained model works.
 - `DevelopmentClassifier` (`AI_SERVICE_CLASSIFIER=development`) is an
   **explicitly isolated test fixture** — a clearly labeled heuristic
-  (`model: "development"` → backend `source: "demo"` → the UI's subtle DEMO
-  badge). Its `DEVELOPMENT_FORCE_*` knobs are never read by the real
-  classifier; a dedicated test proves production inference is identical with
-  and without them, and the E2E starts the real service with poison values set
-  to prove the same over the wire.
+  (`model: "development"` → backend `source: "demo"`, and the app only then
+  shows the demo indicator). It is never reachable from a `real` run; the
+  production default is `real`. Its `DEVELOPMENT_FORCE_*` knobs are never read
+  by the real classifier; a dedicated test proves production inference is
+  identical with and without them, and the E2E starts the real service with
+  poison values set to prove the same over the wire.
+
+## Production hardening
+
+- **Config guard.** `validate_production()` runs at backend startup and REFUSES
+  to boot in production mode with default/dev secrets, `DEBUG_IMAGE_HASH=true`,
+  anonymous MQTT, or TLS disabled (`test_hardening_config.py`).
+- **Real health.** `/health` checks Postgres, MQTT connectivity, and ai-service,
+  returning `ok`/`degraded` per dependency — never a hardcoded ok.
+- **MQTT security.** Broker runs `allow_anonymous false` with per-identity ACLs
+  (`infra/mosquitto/acl`): the backend owns the station tree; each station may
+  only read its own command topic and write its own telemetry topics. Gateway
+  and simulator use TLS (system trust store) for HiveMQ Cloud. Credentials come
+  from the environment only. A broker-level integration matrix proves: wrong
+  password refused, anonymous refused, cross-station publish never propagates,
+  malformed/forged/replayed/reordered events cannot award points
+  (`backend/tests/integration/test_mqtt_security_matrix.py`).
+- **Rate limiting.** Login 5/min/IP, register 10/min/IP (`test_hardening_auth.py`).
+- **Token hygiene.** JWTs carry a `jti`; logout revokes it server-side; every
+  request re-checks revocation (`app/security/revocation.py`).
+- **Account recovery.** Password reset + email verification use hashed one-time
+  tokens with expiry; forgot-password always answers generically.
+- **Uploads.** Capture endpoint enforces a size cap (413 beyond it) and content
+  validation before the image ever reaches the AI.
+- **Rewards once.** Challenge completion is a unique `(user, challenge)` row —
+  the reward can never be double-collected (`test_hardening_challenges.py`).
+- **WebSocket ownership.** Only the deposit owner (or an admin) may subscribe;
+  violations get 4403, invalid tokens 4401 (`test_hardening_ws.py`).
+- **Admin surface.** Admin-only endpoints sit behind `require_admin`
+  (`test_admin.py`); list endpoints paginate with `limit<=100` + total
+  (`test_pagination.py`).
+- **Mobile transport.** Android cleartext is allowed ONLY in debug builds
+  (emulator → 10.0.2.2); release builds forbid cleartext. iOS declares camera
+  usage. The app never holds MQTT credentials.
+- **Deployment.** `infra/docker-compose.yml` requires secrets from the env
+  (`${VAR:?}` interpolation fails fast), binds only 127.0.0.1 on the host,
+  adds healthchecks, restart policies, and memory limits.

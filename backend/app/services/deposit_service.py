@@ -17,11 +17,15 @@ from sqlalchemy.orm import Session
 from ..config import settings
 from ..models import AiPrediction, DepositSession, RoutingPolicy, Station, User
 from ..repositories import DepositRepository
+from .ai_client import AiGateRejection, AiWireError
 from .points_transaction import award_points, record_rejection
+from .predict_service import PredictService
 from .seed import next_operation_id
 
 logger = logging.getLogger("recycle.deposit")
 
+CAPTURE = "capture"
+ANALYZING = "analyzing"
 CONFIRMED = "confirmed"
 REJECTED = "rejected"
 CANCELLED = "cancelled"
@@ -41,6 +45,8 @@ _MACHINE_TO_STATUS = {
     "MEASURING": "measuring",
 }
 _STATUS_RANK = {
+    CAPTURE: -2,
+    ANALYZING: -1,
     "pending": 0,
     "routing": 1,
     "moving": 2,
@@ -66,6 +72,8 @@ class CommandPublisher(Protocol):
         destination_position: int,
         mode: str,
     ) -> None: ...
+
+    def publish_capture_request(self, station_id: str, operation_id: str) -> None: ...
 
 
 def _utcnow() -> datetime:
@@ -98,9 +106,14 @@ class DuplicateDepositError(DepositEventError):
 
 
 class DepositService:
-    def __init__(self, publisher: CommandPublisher) -> None:
+    def __init__(
+        self,
+        publisher: CommandPublisher,
+        predictor: PredictService | None = None,
+    ) -> None:
         self.publisher = publisher
         self.repo = DepositRepository()
+        self.predictor = predictor
 
     # -- session creation ------------------------------------------------------
 
@@ -108,9 +121,24 @@ class DepositService:
         self,
         db: Session,
         user: User,
-        prediction_id: str,
-        station_id: str,
+        prediction_id: str | None = None,
+        station_id: str = "st-001",
     ) -> DepositSession:
+        """Creates a tracked deposit session and routes it.
+
+        Legacy phone-camera path: pass `prediction_id` and the session routes
+        straight away (points are still never awarded here).
+
+        Station-camera path (`prediction_id=None`, the FINAL architecture):
+        the session is created capture-first — the STATION camera supplies the
+        frame via `POST /api/v1/deposit/capture`, the backend classifies it and
+        only then issues the routing command."""
+        station = db.get(Station, station_id)
+        if station is None:
+            raise ValueError("Station not found")
+        if prediction_id is None:
+            return self._create_capture_session(db, user, station)
+
         prediction = db.get(AiPrediction, prediction_id)
         if prediction is None:
             raise ValueError("AI prediction not found")
@@ -124,10 +152,6 @@ class DepositService:
             raise ValueError(
                 "Confidence too low to route. Please retake the photo."
             )
-
-        station = db.get(Station, station_id)
-        if station is None:
-            raise ValueError("Station not found")
 
         policy = db.execute(
             select(RoutingPolicy).where(RoutingPolicy.waste_class == prediction.predicted_class)
@@ -144,6 +168,8 @@ class DepositService:
             status="pending",
             expected_class=prediction.predicted_class,
             expected_position=policy.position,
+            confidence=prediction.confidence,
+            confidence_level=prediction.confidence_level,
             created_at=now,
             expires_at=now + _ttl(),
         )
@@ -163,6 +189,129 @@ class DepositService:
             session.operation_id, prediction.predicted_class, policy.position, mode,
         )
         return session
+
+    def _create_capture_session(self, db: Session, user: User, station: Station) -> DepositSession:
+        """Capture-first session: no prediction yet, the station camera takes
+        the frame. Issues `capture_request` so the camera snaps immediately."""
+        now = _utcnow()
+        session = DepositSession(
+            operation_id=next_operation_id(db),
+            user_id=user.id,
+            station_id=station.id,
+            ai_prediction_id=None,
+            routing_policy_id=None,
+            potential_points=0,
+            status=CAPTURE,
+            expected_class=None,
+            expected_position=None,
+            created_at=now,
+            expires_at=now + _ttl(),
+        )
+        db.add(session)
+        db.commit()
+        db.refresh(session)
+        self.publisher.publish_capture_request(station.station_code, session.operation_id)
+        logger.info(
+            "[CAPTURE-REQUEST] operation=%s station=%s",
+            session.operation_id, station.station_code,
+        )
+        return session
+
+    # -- station camera capture --------------------------------------------------
+
+    def handle_capture(
+        self,
+        db: Session,
+        operation_id: str,
+        station_code: str,
+        image_bytes: bytes,
+        image_url: str | None = None,
+    ) -> dict:
+        """Receives a frame snapped by the STATION camera, classifies it with the
+        real AI service, attaches the prediction to the session and routes —
+        exactly like the legacy phone-camera path but driven by the backend.
+
+        Never awards points: completion still requires the physical MQTT event.
+        A low-confidence frame cannot route; the session is closed as rejected
+        and no route command is issued."""
+        session = self.repo.get_by_operation_id(db, operation_id)
+        if session is None:
+            raise ValueError("Deposit not found")
+        station = db.execute(
+            select(Station).where(
+                or_(Station.station_code == station_code, Station.id == station_code)
+            )
+        ).scalar_one_or_none()
+        if station is None or station.id != session.station_id:
+            raise ValueError("Station mismatch")
+        if session.status in TERMINAL:
+            raise ValueError(f"Deposit already {session.status}")
+
+        session.status = ANALYZING
+        db.commit()
+
+        user = db.get(User, session.user_id)
+        if user is None:
+            raise ValueError("Deposit user no longer exists")
+
+        predictor = self.predictor or PredictService()
+        try:
+            pred = predictor.predict(db, user, image_bytes, image_url=image_url)
+        except AiGateRejection:
+            # The AI camera gate rejected the FRAME (bad lighting, blur, corrupt,
+            # no object) BEFORE classification: no prediction persisted, session
+            # stays capture-able so the station camera can retake.
+            session.status = CAPTURE
+            db.commit()
+            raise
+        except AiWireError:
+            # The AI service itself is unavailable/errored (network, timeout,
+            # bad response). No prediction persisted; the session returns to
+            # `capture` so the camera can retake once the service is back.
+            session.status = CAPTURE
+            db.commit()
+            raise
+
+        policy = db.execute(
+            select(RoutingPolicy).where(RoutingPolicy.waste_class == pred["predicted_class"])
+        ).scalar_one()
+        session.ai_prediction_id = pred["prediction_id"]
+        session.routing_policy_id = policy.id
+        session.expected_class = pred["predicted_class"]
+        session.expected_position = pred["destination_position"]
+        session.potential_points = pred["potential_points"]
+        session.confidence = pred["confidence"]
+        session.confidence_level = pred["confidence_level"]
+
+        if pred["confidence_level"] == "low":
+            session.status = REJECTED
+            session.reject_reason = (
+                "Confidence too low to route. Please retry at the station."
+            )
+            session.completed_at = _utcnow()
+            db.commit()
+            db.refresh(session)
+            logger.info(
+                "[CAPTURE] rejected operation=%s class=%s conf=%.2f",
+                operation_id, pred["predicted_class"], pred["confidence"],
+            )
+            return _serialize(session)
+
+        mode = "automatic" if pred["confidence_level"] == "high" else "manual"
+        session.status = "pending"
+        db.commit()
+        self.publisher.publish_route(
+            station_id=station.station_code,
+            operation_id=session.operation_id,
+            destination_position=policy.position,
+            mode=mode,
+        )
+        db.refresh(session)
+        logger.info(
+            "[CAPTURE] routed operation=%s class=%s destination=%s mode=%s",
+            session.operation_id, pred["predicted_class"], policy.position, mode,
+        )
+        return _serialize(session)
 
     # -- cancellation ------------------------------------------------------------
 
@@ -259,7 +408,7 @@ class DepositService:
             return self._reject(db, session, reason)
 
         try:
-            award_points(
+            event = award_points(
                 db,
                 session,
                 actual_position=actual_position,
@@ -267,6 +416,18 @@ class DepositService:
                 weight_stable=weight_stable,
                 mechanical_confirmed=mechanical,
                 points_awarded=session.potential_points,
+            )
+            # Challenge progress/completion rides the SAME transaction: the
+            # reward is derived from this validated physical event and is
+            # idempotent (unique user+challenge row). A crash here rolls back
+            # base points AND bonus together.
+            from .challenge_service import ChallengeService
+
+            user = db.get(User, session.user_id)
+            challenge_bonus = (
+                ChallengeService().on_deposit_confirmed(db, user, event.predicted_class)
+                if user is not None
+                else 0
             )
             db.commit()
         except Exception:
@@ -278,9 +439,12 @@ class DepositService:
             "[VALIDATION] passed operation=%s", operation_id,
         )
         logger.info(
-            "[POINTS] awarded=%s operation=%s", session.potential_points, operation_id,
+            "[POINTS] awarded=%s challenge_bonus=%s operation=%s",
+            session.potential_points, challenge_bonus, operation_id,
         )
-        return _serialize(session)
+        result = _serialize(session)
+        result["challenge_bonus"] = challenge_bonus
+        return result
 
     # -- helpers -------------------------------------------------------------------
 
@@ -349,10 +513,12 @@ def _serialize(session: DepositSession) -> dict:
     confirmed = session.status == CONFIRMED
     return {
         "operation_id": session.operation_id,
-        "prediction_id": session.ai_prediction_id,
+        "prediction_id": session.ai_prediction_id or "",
         "station_id": session.station_id,
-        "predicted_class": session.expected_class,
-        "expected_position": session.expected_position,
+        "predicted_class": session.expected_class or "",
+        "expected_position": session.expected_position or 0,
+        "confidence": session.confidence or 0.0,
+        "confidence_level": session.confidence_level or "",
         "actual_position": session.actual_position or 0,
         "weight_g": round(session.weight_grams or 0.0, 2),
         "mechanical_confirmed": bool(session.mechanical_confirmed),

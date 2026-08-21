@@ -19,13 +19,6 @@ dependencies:
   # Realtime deposit status (falls back to HTTP polling when not available)
   web_socket_channel: ^3.0.1
 
-  # Camera capture + gallery upload fallback
-  camera: ^0.11.0
-  image_picker: ^1.1.2
-
-  # On-device SHA-256 for the Android camera E2E byte-identity proof
-  crypto: ^3.0.6
-
   # Real-session token storage on-device
   flutter_secure_storage: ^9.2.4
 
@@ -35,6 +28,7 @@ dependencies:
   # Shared domain (models, routing + confidence policies)
   shared:
     path: ../shared
+  mobile_scanner: ^7.4.0
 
 dev_dependencies:
   flutter_test:
@@ -48,6 +42,8 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/images/e2e_plastic_frame.jpg
   fonts:
     - family: Inter
       fonts:

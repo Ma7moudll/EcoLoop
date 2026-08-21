@@ -39,32 +39,3 @@ class AppLogo extends StatelessWidget {
     );
   }
 }
-
-/// Subtle DEMO chip shown whenever a mocked/simulated result could be confused
-/// with real AI or hardware output.
-class DemoBadge extends StatelessWidget {
-  final bool visible;
-  const DemoBadge({super.key, this.visible = true});
-
-  @override
-  Widget build(BuildContext context) {
-    if (!visible) return const SizedBox.shrink();
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: AppColors.yellow.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.yellow.withValues(alpha: 0.5)),
-      ),
-      child: Text(
-        'DEMO',
-        style: const TextStyle(
-          fontSize: 9,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 0.8,
-          color: Color(0xFF8a5a00),
-        ),
-      ),
-    );
-  }
-}

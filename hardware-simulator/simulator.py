@@ -11,7 +11,9 @@ import logging
 import os
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 
+from camera import CaptureUploader
 from config import sim_config
 from hardware import (
     BeamSensor,
@@ -47,6 +49,7 @@ class EcoLoopSimulator:
         carriage: Carriage | None = None,
         load_cell: LoadCell | None = None,
         station: Station | None = None,
+        capture_uploader: "CaptureUploader | None" = None,
     ) -> None:
         self.cfg = config or sim_config
         self.mqtt = mqtt or SimulatorMqttClient(
@@ -55,6 +58,7 @@ class EcoLoopSimulator:
             client_id=f"sim-{self.cfg.station_code.lower()}",
             username=self.cfg.mqtt_username,
             password=self.cfg.mqtt_password,
+            tls=self.cfg.mqtt_tls,
         )
         carriage = carriage or Carriage(initial_position=1, movement_time_per_step=self.cfg.movement_time_seconds)
         load_cell = load_cell or LoadCell(noise_grams=self.cfg.sensor_noise_grams)
@@ -65,6 +69,9 @@ class EcoLoopSimulator:
             beam=beam,
             position_sensor=PositionSensor(self.cfg.positions, carriage.current_position),
         )
+        # The simulated station camera: picks a real frame and uploads it to
+        # the backend `POST /api/v1/deposit/capture` endpoint when asked.
+        self.capture = capture_uploader or CaptureUploader(self.cfg)
         self._running = False
 
     # -- lifecycle ----------------------------------------------------------------
@@ -90,10 +97,18 @@ class EcoLoopSimulator:
     # -- MQTT handler ---------------------------------------------------------------
 
     def _on_command(self, command: dict) -> None:
-        if command.get("command") != "route":
+        kind = command.get("command")
+        if kind not in ("route", "capture_request"):
             logger.info("[CMD] ignoring %r", command.get("command"))
             return
         operation_id = command.get("operation_id")
+        if kind == "capture_request":
+            logger.info("[CMD] capture_request operation=%s", operation_id)
+            try:
+                self.capture.upload(operation_id)
+            except Exception:
+                logger.exception("[SIM] capture upload failed for %s", operation_id)
+            return
         destination = int(command.get("destination_position") or 0)
         logger.info("[CMD] route operation=%s destination=%s", operation_id, destination)
         try:

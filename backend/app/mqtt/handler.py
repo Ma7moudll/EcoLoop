@@ -113,3 +113,10 @@ class RuntimePublishAdapter:
             logger.error("route command dropped for %s (no gateway)", operation_id)
             return
         gw.publish_route(station_id, operation_id, destination_position, mode)
+
+    def publish_capture_request(self, station_id, operation_id) -> None:
+        gw = get_gateway()
+        if gw is None:  # pragma: no cover
+            logger.error("capture_request dropped for %s (no gateway)", operation_id)
+            return
+        gw.publish_capture_request(station_id, operation_id)

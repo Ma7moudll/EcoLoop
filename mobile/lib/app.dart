@@ -44,7 +44,7 @@ class _AuthGate extends ConsumerWidget {
   }
 }
 
-/// Small understated logo used by offline/error surfaces.
+/// Small understated logo used by error surfaces.
 class BrandMark extends StatelessWidget {
   const BrandMark({super.key});
 

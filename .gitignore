@@ -28,3 +28,8 @@ ai-service/models/*.pt
 
 # OS
 .DS_Store
+
+# Mosquitto credentials (generated per environment; NEVER commit)
+infra/mosquitto/passwd
+.dev-mosquitto.passwd
+.dev-mosquitto.acl

@@ -60,22 +60,6 @@ class ApiClient {
     return _send(() => _dio.post<Map<String, dynamic>>(path, data: data));
   }
 
-  Future<Map<String, dynamic>> postMultipart(
-    String path,
-    List<int> imageBytes, {
-    String field = 'image',
-    String filename = 'capture.jpg',
-  }) async {
-    final form = FormData.fromMap({
-      field: MultipartFile.fromBytes(
-        imageBytes,
-        filename: filename,
-        contentType: DioMediaType('image', 'jpeg'),
-      ),
-    });
-    return _send(() => _dio.post<Map<String, dynamic>>(path, data: form));
-  }
-
   Future<Map<String, dynamic>> _send(
       Future<Response<Map<String, dynamic>>> Function() run) async {
     try {

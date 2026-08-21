@@ -9,8 +9,7 @@ import '../../widgets/app_text_field.dart';
 import 'register_screen.dart';
 
 /// Login with email + password. Errors (invalid credentials, offline) surface
-/// in an inline banner; a demo account shortcut is provided because the seeded
-/// server account is part of demo mode, never a private user.
+/// in an inline banner.
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
@@ -56,16 +55,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
-  }
-
-  Future<void> _demoLogin() async {
-    setState(() {
-      _busy = true;
-      _banner = null;
-      _email.text = 'demo@recycle.vision';
-      _password.text = 'demo123';
-    });
-    await _submit('demo@recycle.vision', 'demo123');
   }
 
   @override
@@ -166,19 +155,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                   builder: (_) => const RegisterScreen()),
                             ),
                     child: const Text('Create account'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              const Divider(height: 20),
-              const SizedBox(height: 6),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  TextButton.icon(
-                    onPressed: _busy ? null : _demoLogin,
-                    icon: const Icon(Icons.auto_awesome, size: 15),
-                    label: const Text('Try the demo account'),
                   ),
                 ],
               ),

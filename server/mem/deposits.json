@@ -1,1 +1,0 @@
-{"deposits":[{"operation_id":"OP-11111","prediction_id":"pred_1","station_id":"st-001","predicted_class":"plastic","expected_position":1,"actual_position":0,"weight_g":0.0,"mechanical_confirmed":false,"potential_points":5,"points_awarded":0,"status":"pending","expires_at":"2026-08-16T19:33:43.472170Z"}]}

@@ -3,16 +3,24 @@
 #
 # The hardware simulator runs on the host (or the `simulator` profile below)
 # because it is the process that will become the real ESP32 firmware.
+#
+# SECRETS: JWT_SECRET / MQTT_PASSWORD / STATION_API_KEY are read from the
+# environment (or an .env file next to this compose file) — never hardcoded.
+# The mosquitto container mounts infra/mosquitto/mosquitto.conf which REQUIRES
+# authentication (allow_anonymous false); provision the password file with:
+#   mosquitto_passwd -c infra/mosquitto/passwd backend
+# (the passwd file is git-ignored; ACL is infra/mosquitto/acl).
 
 services:
   db:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: recycle
       POSTGRES_PASSWORD: recycle
       POSTGRES_DB: recycle_vision
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./postgres/init:/docker-entrypoint-initdb.d:ro
@@ -21,43 +29,77 @@ services:
       interval: 3s
       timeout: 3s
       retries: 20
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
   mosquitto:
     image: eclipse-mosquitto:2
+    restart: unless-stopped
     ports:
-      - "1883:1883"
+      - "127.0.0.1:1883:1883"
     volumes:
       - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./mosquitto/acl:/mosquitto/acl:ro
+      - ./mosquitto/passwd:/mosquitto/passwd:ro
     healthcheck:
-      test: ["CMD", "mosquitto_sub", "-h", "localhost", "-t", "$SYS/#", "-C", "1", "-W", "3"]
+      # Authenticated broker: the healthcheck must authenticate too.
+      test: ["CMD-SHELL", "mosquitto_sub -h localhost -u backend -P \"$$MQTT_PASSWORD\" -t '$$SYS/broker/version' -C 1 -W 3"]
       interval: 5s
       timeout: 3s
       retries: 10
+    environment:
+      MQTT_PASSWORD: ${MQTT_PASSWORD:?set MQTT_PASSWORD in your environment}
 
   ai-service:
     build: ../ai-service
+    restart: unless-stopped
     environment:
-      AI_SERVICE_CLASSIFIER: development   # switch to `real` once a model exists
-      AI_MODEL_PATH: ""
+      AI_SERVICE_CLASSIFIER: real
+      AI_MODEL_PATH: models/model.onnx
     ports:
-      - "8051:8051"
+      - "127.0.0.1:8051:8051"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://localhost:8051/health', timeout=2)\" || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 1G
 
   backend:
     build: ../backend
+    restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
       mosquitto:
         condition: service_healthy
+      ai-service:
+        condition: service_started
     environment:
       DATABASE_URL: postgresql+psycopg2://recycle:recycle@db:5432/recycle_vision
       MQTT_BROKER_HOST: mosquitto
       MQTT_BROKER_PORT: "1883"
+      MQTT_USERNAME: backend
+      MQTT_PASSWORD: ${MQTT_PASSWORD:?set MQTT_PASSWORD in your environment}
       AI_SERVICE_URL: http://ai-service:8051
+      STATION_API_KEY: ${STATION_API_KEY:?set STATION_API_KEY in your environment}
       SEED_ON_STARTUP: "true"
-      JWT_SECRET: change-me-in-production
+      SEED_DEMO_USER: "false"
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      # REQUIRED in production; provide a strong random value via env/.env:
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in your environment}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
     ports:
       - "8000:8000"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
   # Optional: run the simulated ESP32 inside Docker too.
   #   docker compose -f infra/docker-compose.yml --profile simulator up simulator
@@ -66,9 +108,14 @@ services:
       context: ../hardware-simulator
       dockerfile: Dockerfile
     profiles: ["simulator"]
+    restart: unless-stopped
     environment:
       MQTT_BROKER_HOST: mosquitto
       MQTT_BROKER_PORT: "1883"
+      MQTT_USERNAME: backend
+      MQTT_PASSWORD: ${MQTT_PASSWORD:?set MQTT_PASSWORD in your environment}
+      BACKEND_URL: http://backend:8000
+      STATION_API_KEY: ${STATION_API_KEY:?set STATION_API_KEY in your environment}
       STATION_ID: st-001
       STATION_CODE: ST-001
     depends_on:

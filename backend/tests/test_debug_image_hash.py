@@ -1,9 +1,9 @@
 """Debug-only byte-identity router: mounted only when DEBUG_IMAGE_HASH=true.
 
-The Android camera E2E uses this fingerprint route to prove that the exact
-bytes the camera captured arrive at the backend unchanged (by comparing the
-SHA-256 computed on-device against the hash of what the HTTP layer received).
-It must NOT exist in a normal build.
+The hardware validation harness uses this fingerprint route to prove that the
+exact bytes the STATION camera captured arrive at the backend unchanged (by
+comparing the SHA-256 computed on-device against the hash of what the HTTP
+layer received). It must NOT exist in a normal build.
 """
 from __future__ import annotations
 

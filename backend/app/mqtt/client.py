@@ -57,6 +57,14 @@ class MqttGateway:
         self._client.on_message = self._on_message
         if self.username:
             self._client.username_pw_set(self.username, self.password)
+        if settings.mqtt_tls:
+            # TLS with the system trust store: certificate validation is ALWAYS
+            # on (no insecure bypasses). HiveMQ Cloud serves a publicly trusted
+            # chain, so no custom CA bundle is needed.
+            self._client.tls_set()  # type: ignore[no-untyped-call]
+            # Default to the TLS listener unless the caller pinned a port.
+            if broker_port is None:
+                self.broker_port = settings.mqtt_tls_port
         self._client.reconnect_delay_set(1, 30)
 
     # -- setup -----------------------------------------------------------------
@@ -166,5 +174,14 @@ class MqttGateway:
                 "command": "route",
                 "destination_position": destination_position,
                 "mode": mode,
+            },
+        )
+
+    def publish_capture_request(self, station_id: str, operation_id: str) -> None:
+        self.publish_command(
+            station_id,
+            {
+                "operation_id": operation_id,
+                "command": "capture_request",
             },
         )

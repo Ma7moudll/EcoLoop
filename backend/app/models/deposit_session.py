@@ -36,16 +36,18 @@ class DepositSession(Base):
     station_id: Mapped[str] = mapped_column(
         String(64), ForeignKey("stations.id", ondelete="RESTRICT"), nullable=False
     )
-    ai_prediction_id: Mapped[str] = mapped_column(
-        String(64), ForeignKey("ai_predictions.id", ondelete="RESTRICT"), nullable=False
+    ai_prediction_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("ai_predictions.id", ondelete="RESTRICT"), nullable=True
     )
     routing_policy_id: Mapped[str | None] = mapped_column(
         String(64), ForeignKey("routing_policies.id", ondelete="RESTRICT"), nullable=True
     )
     potential_points: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")  # pending|confirmed|rejected|cancelled|expired
-    expected_class: Mapped[str] = mapped_column(String(32), nullable=False)
-    expected_position: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")  # capture|analyzing|pending|confirmed|rejected|cancelled|expired
+    expected_class: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    expected_position: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    confidence_level: Mapped[str | None] = mapped_column(String(16), nullable=True)  # high|medium|low
     actual_position: Mapped[int | None] = mapped_column(Integer, nullable=True)
     weight_grams: Mapped[float | None] = mapped_column(Float, nullable=True)
     weight_stable: Mapped[bool | None] = mapped_column(Boolean, nullable=True)

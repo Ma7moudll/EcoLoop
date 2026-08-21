@@ -13,8 +13,13 @@ _db_file = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
 os.environ["DATABASE_URL"] = f"sqlite:///{_db_file.name}"
 os.environ["MQTT_BROKER_HOST"] = "127.0.0.1"
 os.environ["MQTT_BROKER_PORT"] = "1884"  # nothing listens here; gateway retries quietly
+# Integration tests spin up an AUTHENTICATED broker on 1884 with these exact
+# credentials (test-only values, never used outside the throwaway broker).
+os.environ["MQTT_USERNAME"] = "backend"
+os.environ["MQTT_PASSWORD"] = "itest-broker-pass"
 os.environ["JWT_SECRET"] = "test-secret"
 os.environ["SEED_ON_STARTUP"] = "true"
+os.environ["SEED_DEMO_USER"] = "true"
 os.environ["AUTOMATIC_ROUTING_REQUIRED"] = "false"
 
 import pytest  # noqa: E402
@@ -45,10 +50,11 @@ class FakeAi:
 
 
 class FakePublisher:
-    """Records route commands instead of talking to MQTT."""
+    """Records route/capture commands instead of talking to MQTT."""
 
     def __init__(self) -> None:
         self.commands: list[dict] = []
+        self.capture_requests: list[dict] = []
 
     def publish_route(self, station_id: str, operation_id: str, destination_position: int, mode: str) -> None:
         self.commands.append(
@@ -58,6 +64,11 @@ class FakePublisher:
                 "destination_position": destination_position,
                 "mode": mode,
             }
+        )
+
+    def publish_capture_request(self, station_id: str, operation_id: str) -> None:
+        self.capture_requests.append(
+            {"station_id": station_id, "operation_id": operation_id}
         )
 
 
@@ -71,10 +82,17 @@ def client():
 def fresh_db(client):
     """Clean schema + seed before every test (the MQTT gateway daemon keeps
     retrying 127.0.0.1:1884 harmlessly in the background)."""
+    from app.routers import auth as auth_router
+    from app.security import revocation as revocation_module
+
     drop_all()
     create_tables()
     with SessionLocal() as db:
-        seed(db)
+        seed(db, seed_demo_user=True)
+    # In-memory security state must not leak between tests.
+    auth_router._login_limiter.reset()
+    auth_router._register_limiter.reset()
+    revocation_module.revocations.reset()
     yield
 
 

@@ -42,8 +42,21 @@ class PredictionResponse(BaseModel):
 
 
 class CreateSessionRequest(BaseModel):
-    ai_prediction_id: str
+    """Station-session identification. `ai_prediction_id` is OPTIONAL: with a
+    prediction present this is the legacy phone-camera path; without one the
+    session is created capture-first and the STATION camera supplies the frame
+    via the station-key-authenticated capture endpoint."""
+
+    ai_prediction_id: str | None = None
     station_id: str = "st-001"
+
+
+class CaptureRejectionResponse(BaseModel):
+    """Structured 422 body returned by `POST /deposit/capture` when the frame
+    cannot yield a routable prediction (gate rejection or low confidence)."""
+
+    code: str
+    error: str
 
 
 class CancelRequest(BaseModel):

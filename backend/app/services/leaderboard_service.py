@@ -19,6 +19,25 @@ class LeaderboardService:
             for r in rows
         ]
 
+    def get_entries_paged(
+        self, db: Session, scope: str, limit: int, offset: int
+    ) -> tuple[list[dict], int]:
+        """Ranked page + total for the scope."""
+        from sqlalchemy import func as sa_func
+
+        base = select(LeaderboardEntry).where(LeaderboardEntry.scope == scope)
+        total = db.execute(
+            select(sa_func.count()).select_from(base.subquery())
+        ).scalar_one()
+        rows = db.execute(
+            base.order_by(LeaderboardEntry.points.desc()).limit(limit).offset(offset)
+        ).scalars().all()
+        entries = [
+            {"id": r.entity_id, "name": r.name, "detail": r.detail, "points": r.points}
+            for r in rows
+        ]
+        return entries, int(total)
+
     def repair(self, db: Session) -> None:
         """Rebuild ranking rows from ground truth. Called at startup after a
         seed so rankings are never stale."""

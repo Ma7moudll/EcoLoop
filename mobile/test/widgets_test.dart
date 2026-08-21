@@ -18,10 +18,10 @@ void main() {
       expect(find.text('Impact'), findsOneWidget);
       expect(find.text('Leaderboard'), findsOneWidget);
       expect(find.text('Profile'), findsOneWidget);
-      expect(find.byIcon(Icons.qr_code_scanner), findsOneWidget);
+      expect(find.byIcon(Icons.recycling), findsOneWidget);
     });
 
-    testWidgets('tapping the emphasized scan action reports index 2',
+    testWidgets('tapping the emphasized recycle action reports index 2',
         (tester) async {
       int? selected;
       await tester.pumpWidget(MaterialApp(
@@ -32,7 +32,7 @@ void main() {
           ),
         ),
       ));
-      await tester.tap(find.byIcon(Icons.qr_code_scanner));
+      await tester.tap(find.byIcon(Icons.recycling));
       expect(selected, 2);
     });
 

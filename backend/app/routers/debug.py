@@ -10,8 +10,9 @@ from ..security import get_current_user
 # Debug-only surface for proving byte identity end-to-end. This router is only
 # mounted when `DEBUG_IMAGE_HASH=true` (see app/main.py) so it never exists for
 # normal users. It performs no inference and persists nothing — it only echoes
-# a fingerprint of the exact bytes the HTTP layer received, which the Android
-# E2E compares against the SHA-256 the camera computed on-device.
+# a fingerprint of the exact bytes the HTTP layer received, which the hardware
+# validation harness compares against the SHA-256 the station camera computed
+# on-device (byte-identity proof that no re-processing happened in transit).
 router = APIRouter(prefix="/debug", tags=["debug"])
 
 

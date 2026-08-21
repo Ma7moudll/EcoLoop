@@ -64,7 +64,8 @@ class Prediction {
   final int potentialPoints;
   final DateTime expiresAt;
 
-  /// `demo` when produced by the mock AI, `ai` when a real model ran.
+  /// Reported by the server: `ai` when a real trained model ran, `demo` only
+  /// if the backend explicitly served a development-fixture prediction.
   final String source;
 
   const Prediction({
@@ -140,11 +141,14 @@ class Station {
       };
 }
 
-/// Deposit lifecycle status. `pending` and the live phases (`routing` →
-/// `moving` → `ready` → `detecting` → `measuring`) mirror the machine's
-/// physical state streamed over WebSocket; the last four values are terminal
+/// Deposit lifecycle status. `capture`/`analyzing` are the FINAL station-camera
+/// phases (awaiting the frame / classifying it server-side); the machine
+/// phases (`routing` → `moving` → `ready` → `detecting` → `measuring`) mirror
+/// the physical stream over WebSocket; the last four values are terminal
 /// outcomes the backend persists after the authoritative sensor event.
 enum DepositStatus {
+  capture('capture'),
+  analyzing('analyzing'),
   pending('pending'),
   routing('routing'),
   moving('moving'),
@@ -170,6 +174,10 @@ enum DepositStatus {
   /// A live phase the machine is still working through (not yet terminal).
   bool get isLive => !isTerminal;
 
+  /// A phase where the session is still waiting on the station camera / AI
+  /// before any routing happened.
+  bool get isCapturePhase => this == capture || this == analyzing;
+
   static DepositStatus fromApi(String value) {
     for (final status in DepositStatus.values) {
       if (status.apiValue == value) return status;
@@ -194,6 +202,13 @@ class Deposit {
   final String? rejectReason;
   final DateTime expiresAt;
 
+  /// AI classification confidence [0..1]; 0 until the station camera frame is
+  /// classified (capture/analyzing phases). Backend-provided, UI-only display.
+  final double confidence;
+
+  /// Classification band (`high`/`medium`/`low`); empty until classified.
+  final ConfidenceLevel? confidenceLevel;
+
   const Deposit({
     required this.operationId,
     required this.predictionId,
@@ -208,6 +223,8 @@ class Deposit {
     required this.status,
     required this.expiresAt,
     this.rejectReason,
+    this.confidence = 0,
+    this.confidenceLevel,
   });
 
   factory Deposit.fromJson(Map<String, dynamic> json) => Deposit(
@@ -225,6 +242,11 @@ class Deposit {
         status: DepositStatus.fromApi(json['status'] as String),
         expiresAt: DateTime.parse(json['expires_at'] as String),
         rejectReason: json['reject_reason'] as String?,
+        confidence: (json['confidence'] as num? ?? 0).toDouble(),
+        confidenceLevel: json['confidence_level'] == null ||
+                (json['confidence_level'] as String).isEmpty
+            ? null
+            : ConfidenceLevel.fromApi(json['confidence_level'] as String),
       );
 
   Map<String, dynamic> toJson() => {
@@ -241,6 +263,9 @@ class Deposit {
         'status': status.apiValue,
         'expires_at': expiresAt.toUtc().toIso8601String(),
         if (rejectReason != null) 'reject_reason': rejectReason,
+        'confidence': confidence,
+        if (confidenceLevel != null)
+          'confidence_level': confidenceLevel!.apiValue,
       };
 }
 

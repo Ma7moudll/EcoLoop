@@ -51,7 +51,7 @@ class AppBottomNav extends StatelessWidget {
                 selected: currentIndex == 1,
                 onTap: () => onSelected(1),
               ),
-              _ScanButton(selected: currentIndex == 2, onTap: () => onSelected(2)),
+              _RecycleButton(selected: currentIndex == 2, onTap: () => onSelected(2)),
               _NavItem(
                 index: 3,
                 icon: Icons.leaderboard_rounded,
@@ -117,12 +117,13 @@ class _NavItem extends StatelessWidget {
   }
 }
 
-/// Raised circular scan button that breaks out of the dark bar.
-class _ScanButton extends StatelessWidget {
+/// Raised circular recycle button that breaks out of the dark bar. Opens the
+/// full-screen station-camera recycle flow.
+class _RecycleButton extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
 
-  const _ScanButton({required this.selected, required this.onTap});
+  const _RecycleButton({required this.selected, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -146,7 +147,7 @@ class _ScanButton extends StatelessWidget {
               ),
             ],
           ),
-          child: Icon(Icons.qr_code_scanner, color: Colors.white, size: 26),
+          child: const Icon(Icons.recycling, color: Colors.white, size: 26),
         ),
       ),
     );

@@ -161,9 +161,13 @@ class FakeDataRepository extends DataRepository {
   FakeDataRepository() : super(ApiClient('http://localhost:9999'));
 
   AppUser? user;
+  List<Station> stations = const [Station.defaultStation];
 
   @override
   Future<AppUser> fetchMe() async => user ?? fakeUser();
+
+  @override
+  Future<List<Station>> fetchStations() async => stations;
 
   @override
   Future<Impact> fetchImpact() async => Impact(
@@ -216,7 +220,7 @@ class FakeDepositRepository extends DepositRepository {
 
   @override
   Future<Deposit> createSession(
-      {required String predictionId, required String stationId}) async {
+      {String? predictionId, required String stationId}) async {
     return session;
   }
 

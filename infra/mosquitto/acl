@@ -1,0 +1,24 @@
+# EcoLoop MQTT ACL — least privilege.
+#
+# backend: full control of the station tree (issues commands, consumes
+#          telemetry/events for ALL stations).
+# station: may ONLY consume its own command topics and publish its own
+#          telemetry/event topics. No cross-station access, no wildcards
+#          beyond its own $STATION_CODE prefix, no $SYS read.
+#
+# The mobile app NEVER receives broker credentials and never connects to
+# MQTT — it talks to the backend API/WebSocket only.
+
+user backend
+topic readwrite ecoloop/stations/#
+
+# Per-station identity pattern (repeat per physical station, substituting
+# the station code). Example for ST-001:
+#
+# user station-ST-001
+# topic read ecoloop/stations/ST-001/command
+# topic read ecoloop/stations/ST-001/capture_request
+# topic write ecoloop/stations/ST-001/state
+# topic write ecoloop/stations/ST-001/sensor
+# topic write ecoloop/stations/ST-001/event
+# topic write ecoloop/stations/ST-001/heartbeat

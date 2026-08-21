@@ -24,7 +24,11 @@ def create_session(client, auth, prediction) -> dict:
 
 
 def complete(client, operation_id: str, **kwargs) -> dict:
-    r = client.post("/api/v1/deposit/callback/event", json=confirm_event(operation_id, **kwargs))
+    r = client.post(
+        "/api/v1/deposit/callback/event",
+        headers={"X-Station-Key": "dev-station-key"},
+        json=confirm_event(operation_id, **kwargs),
+    )
     return r.status_code, r.json()
 
 

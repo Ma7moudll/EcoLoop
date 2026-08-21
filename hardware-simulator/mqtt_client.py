@@ -23,6 +23,7 @@ class SimulatorMqttClient:
         client_id: str,
         username: str | None = None,
         password: str | None = None,
+        tls: bool = False,
     ) -> None:
         self.broker_host = broker_host
         self.broker_port = broker_port
@@ -35,6 +36,8 @@ class SimulatorMqttClient:
         )
         if username:
             self._client.username_pw_set(username, password)
+        if tls:
+            self._client.tls_set()  # system trust store, no bypass
         self._client.on_connect = self._on_connect
         self._client.on_disconnect = self._on_disconnect
         self._client.on_message = self._on_message

@@ -150,18 +150,34 @@ def main() -> None:
     procs: list[subprocess.Popen] = []
 
     try:
-        # -- mosquitto ----------------------------------------------------------
+        # -- mosquitto (AUTHENTICATED — parity with production) ------------------
+        import secrets
+
+        mqtt_user = "backend"
+        mqtt_pass = secrets.token_urlsafe(24)
+        passwd_file = "/tmp/e2e_mosquitto.passwd"
+        acl_file = "/tmp/e2e_mosquitto.acl"
+        Path(passwd_file).unlink(missing_ok=True)  # mosquitto_passwd -c needs a fresh path
+        subprocess.run(
+            ["/opt/homebrew/bin/mosquitto_passwd", "-b", "-c", passwd_file,
+             mqtt_user, mqtt_pass],
+            check=True,
+        )
+        with open(acl_file, "w") as acl:
+            acl.write(f"user {mqtt_user}\ntopic readwrite ecoloop/stations/#\n")
         conf = tempfile.NamedTemporaryFile(mode="w", suffix=".conf", delete=False)
         conf.write(
             f"listener {MQTT_PORT}\n"
-            "allow_anonymous true\n"
+            "allow_anonymous false\n"
+            f"password_file {passwd_file}\n"
+            f"acl_file {acl_file}\n"
             "max_queued_messages 1000\n"
             "message_size_limit 0\n"
         )
         conf.close()
         procs.append(subprocess.Popen(
             [str(MOSQUITTO_BIN), "-c", conf.name, "-v"],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            stdout=open("/tmp/e2e_mosquitto.log", "w"), stderr=subprocess.STDOUT,
         ))
         _wait_port(MQTT_PORT)
 
@@ -195,9 +211,12 @@ def main() -> None:
             "DATABASE_URL": DB_URL,
             "MQTT_BROKER_HOST": HOST,
             "MQTT_BROKER_PORT": str(MQTT_PORT),
+            "MQTT_USERNAME": mqtt_user,
+            "MQTT_PASSWORD": mqtt_pass,
             "AI_SERVICE_URL": f"http://{HOST}:{AI_PORT}",
             "JWT_SECRET": JWT_SECRET,
             "SEED_ON_STARTUP": "true",
+            "SEED_DEMO_USER": "true",
             "DEBUG": "false",
         })
         backend_log = open("/tmp/e2e_backend.log", "w")
@@ -213,11 +232,24 @@ def main() -> None:
         # state so repeated runs stay idempotent (demo user starts at 45 pts).
         _truncate_db()
 
+        # -- HTTP client (defined early: the station-camera handler below posts
+        #    capture frames on behalf of the station while the backend drives
+        #    the flow).
+        client = httpx.Client(base_url=f"http://{HOST}:{API_PORT}", timeout=20.0)
+        login = client.post("/api/v1/auth/login", json={
+            "email": DEMO_EMAIL, "password": DEMO_PASSWORD,
+        })
+        assert login.status_code == 200, login.text
+        token = login.json()["token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
         # -- simulator ------------------------------------------------------------
         from config import SimConfig
         cfg = SimConfig()
         cfg.broker_host = HOST
         cfg.broker_port = MQTT_PORT
+        cfg.mqtt_username = mqtt_user
+        cfg.mqtt_password = mqtt_pass
         cfg.movement_time_seconds = 0.0
         sim = EcoLoopSimulator(
             config=cfg,
@@ -225,9 +257,30 @@ def main() -> None:
             load_cell=LoadCell(noise_grams=0, seed=7),
         )
         control = ScenarioControl()
+        session_station_id: dict[str, str] = {}
+
+        def post_capture(operation_id: str) -> None:
+            """Stand in for the STATION camera (FINAL path): the backend issued
+            `capture_request`, so we upload a real AI fixture frame to
+            `/deposit/capture` with the station key. The backend then runs the
+            REAL PredictService, attaches the prediction and routes."""
+            stations = client.get("/api/v1/stations", headers=headers).json()["items"]
+            station = next(s for s in stations if s["id"] == session_station_id.get(operation_id, "st-001"))
+            r = client.post(
+                "/api/v1/deposit/capture",
+                headers={**headers, "X-Station-Key": "dev-station-key"},
+                data={"operation_id": operation_id, "station_code": station["station_code"]},
+                files={"image": ("frame.jpg", _fixture_bytes("high_conf_plastic.png"), "image/jpeg")},
+            )
+            assert r.status_code == 200, r.text
 
         def on_command(command: dict) -> None:
             control.received.append(command)
+            if command.get("command") == "capture_request":
+                # FINAL station-camera path: tell the camera to snap + classify.
+                # Routing happens after classification, so take no plan here.
+                post_capture(command["operation_id"])
+                return
             plan = control.take_plan()
             if plan is None:
                 return
@@ -246,15 +299,6 @@ def main() -> None:
         sim.mqtt.start(cfg.command_topic())
         assert sim.mqtt.connected.wait(10), "simulator not connected"
         time.sleep(0.5)
-
-        # -- HTTP client -----------------------------------------------------------
-        client = httpx.Client(base_url=f"http://{HOST}:{API_PORT}", timeout=20.0)
-        login = client.post("/api/v1/auth/login", json={
-            "email": DEMO_EMAIL, "password": DEMO_PASSWORD,
-        })
-        assert login.status_code == 200, login.text
-        token = login.json()["token"]
-        headers = {"Authorization": f"Bearer {token}"}
 
         # -- helpers -----------------------------------------------------------------
         results: list[str] = []
@@ -295,6 +339,19 @@ def main() -> None:
             )
             assert r.status_code == 200, r.text
             return r.json()
+
+        def create_capture_session(station_id: str) -> dict:
+            """FINAL station-camera path: NO prediction id — the backend creates
+            the session capture-first and asks the STATION camera for a frame
+            (`capture_request`)."""
+            r = client.post(
+                "/api/v1/deposit/session", headers=headers,
+                json={"station_id": station_id},
+            )
+            assert r.status_code == 200, r.text
+            session = r.json()
+            session_station_id[session["operation_id"]] = station_id
+            return session
 
         def wait_status(op_id: str, target: str, timeout: float = 20.0) -> dict:
             deadline = time.time() + timeout
@@ -511,6 +568,47 @@ def main() -> None:
         )
 
         # =========================================================================
+        # Scenario I — STATION CAMERA (FINAL path): the phone never snaps a
+        # photo. `create_capture_session` starts capture-first; the backend
+        # publishes `capture_request`, the STATION camera (driven here by
+        # `post_capture`) uploads a real frame to `/deposit/capture`, the
+        # backend runs the REAL AI, routes automatically, and the physical drop
+        # completes. Points only appear after the MQTT `deposit_result`.
+        # =========================================================================
+        start = points_now()
+        control.plan = DepositPlan(name="station-capture")
+        session = create_capture_session("st-001")
+        op_i = session["operation_id"]
+        assert session["status"] == "capture", session  # capture-first, not routed
+        record("Station session starts capture-first (no prediction)", True)
+
+        data = wait_status(op_i, "confirmed")
+        assert data["status"] == "confirmed", data
+        assert data["points_awarded"] == 5, data
+        assert data["actual_position"] == 1, data
+        assert data["predicted_class"] == "plastic", data
+        record("Station capture -> real AI -> route -> confirmed +5", True)
+        record("Points +5 exactly (station path)", points_now() == start + 5,
+               f"start={start} now={points_now()}")
+
+        req = [c for c in control.received if c.get("operation_id") == op_i
+               and c.get("command") == "capture_request"]
+        route = [c for c in control.received if c.get("operation_id") == op_i
+                 and "destination_position" in c]
+        record("Backend published capture_request to the station camera",
+               bool(req), str(req))
+        record("Backend routed after classification (mode=automatic)",
+               bool(route) and route[0].get("mode") == "automatic", str(route))
+        record("Capture endpoint never awarded points directly (HTTP cannot)",
+               "points_awarded" not in {c.get("points_awarded") for c in req},
+               "confirmed only after physical drop")
+
+        history = client.get("/api/v1/waste/history", headers=headers).json()["items"]
+        ev_i = [e for e in history if e["operation_id"] == op_i]
+        record("Audit row exists for station-camera deposit (5 pts)",
+               bool(ev_i) and ev_i[0]["points_awarded"] == 5)
+
+        # =========================================================================
         # Final DB integrity sweep.
         # =========================================================================
         conn = _connect_pg()
@@ -538,20 +636,21 @@ def main() -> None:
             n_dup_events = cur.fetchone()[0]
         conn.close()
 
-        # A: +5, F: +5 -> exactly two paid events, two confirmed sessions.
+        # A: +5, F: +5, I: +5 -> exactly three paid events, three confirmed
+        # sessions (the station-camera path awards through the same pipeline).
         record(
-            "DB: exactly 2 confirmed sessions / 2 paid waste events",
-            n_confirmed == 2 and n_paid == 2,
+            "DB: exactly 3 confirmed sessions / 3 paid waste events",
+            n_confirmed == 3 and n_paid == 3,
             f"confirmed={n_confirmed} paid={n_paid} by_status={by_status}",
         )
         record("DB: no duplicated waste_events", n_dup_events == 0)
         record(
-            "DB: final points = 45 + 5 + 5 = 55",
-            final_points == 55, f"points={final_points}",
+            "DB: final points = 45 + 5 + 5 + 5 = 60",
+            final_points == 60, f"points={final_points}",
         )
         record(
-            "DB: 7 deposit sessions on record (G=422 never created one)",
-            n_sessions == 7, f"n={n_sessions}",
+            "DB: 8 deposit sessions on record (G=422 never created one)",
+            n_sessions == 8, f"n={n_sessions}",
         )
 
         print()

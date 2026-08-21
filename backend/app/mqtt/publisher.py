@@ -23,3 +23,13 @@ class RuntimePublisher(CommandPublisher):
             )
             return
         gw.publish_route(station_id, operation_id, destination_position, mode)
+
+    def publish_capture_request(self, station_id: str, operation_id: str) -> None:
+        gw = get_gateway()
+        if gw is None:
+            logger.warning(
+                "[MQTT] no gateway configured; capture_request not published "
+                "operation=%s", operation_id,
+            )
+            return
+        gw.publish_capture_request(station_id, operation_id)

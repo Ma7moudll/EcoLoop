@@ -1,18 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared/shared.dart';
 
-import '../../core/app_config.dart';
 import '../../core/app_theme.dart';
 import '../../core/formatters.dart';
 import '../../providers/data_providers.dart';
 import '../../providers/session_provider.dart';
+import '../../services/data_repository.dart';
 import '../../widgets/app_logo.dart';
 import '../../widgets/gamification_cards.dart';
 import '../../widgets/history_row.dart';
 import '../../widgets/state_views.dart';
 import 'challenges_screen.dart';
 import 'history_screen.dart';
-import 'scan/scan_flow.dart';
+import 'recycle/recycle_screen.dart';
 import 'settings_screen.dart';
 
 /// Home: live user row, points hero, recent activity, challenges preview.
@@ -26,6 +27,9 @@ class HomeScreen extends ConsumerWidget {
     final pointsAsync = ref.watch(currentUserProvider);
     final historyAsync = ref.watch(historyProvider);
     final challengesAsync = ref.watch(challengesProvider);
+    final impactAsync = ref.watch(impactProvider);
+    final facultyAsync =
+        ref.watch(leaderboardProvider(LeaderScope.faculties));
 
     final firstName =
         (user?.name.isNotEmpty ?? false) ? user!.name.split(' ').first : 'there';
@@ -42,11 +46,6 @@ class HomeScreen extends ConsumerWidget {
           child: AppLogo(size: 22, showWordmark: true),
         ),
         actions: [
-          if (AppConfig.demoMode)
-            const Padding(
-              padding: EdgeInsets.only(right: 4),
-              child: Center(child: DemoBadge()),
-            ),
           IconButton(
             tooltip: 'Settings',
             icon: const Icon(Icons.settings_outlined),
@@ -87,10 +86,20 @@ class HomeScreen extends ConsumerWidget {
                 data: (me) => PointsCard(points: me?.points ?? user?.points ?? 0),
               ),
             ),
-            // Scan CTA
+            // Impact strip + faculty rank (live from the backend)
+            _ImpactAndRank(
+              impactAsync: impactAsync,
+              facultyAsync: facultyAsync,
+              facultyId: user?.facultyId,
+              facultyName: user?.facultyName,
+            ),
+            const SizedBox(height: 16),
+            // Recycle CTA — station-camera flow (phone identifies the station,
+            // the station camera classifies the item).
             InkWell(
               onTap: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(builder: (_) => const ScanFlowRoot()),
+                MaterialPageRoute<void>(
+                    builder: (_) => const RecycleScreen()),
               ),
               borderRadius: BorderRadius.circular(AppRadii.card),
               child: Container(
@@ -105,14 +114,14 @@ class HomeScreen extends ConsumerWidget {
                 ),
                 child: const Row(
                   children: [
-                    Icon(Icons.qr_code_scanner, color: Colors.white, size: 32),
+                    Icon(Icons.recycling, color: Colors.white, size: 32),
                     SizedBox(width: 14),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Recycle an item',
+                            'Recycle now',
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: 15,
@@ -120,8 +129,9 @@ class HomeScreen extends ConsumerWidget {
                             ),
                           ),
                           Text(
-                            'Scan waste, route it to the EcoLoop station, '
-                            'earn points.',
+                            'Go to an EcoLoop station and scan its QR. The '
+                            'station camera routes your item and you earn '
+                            'points.',
                             style: TextStyle(
                                 color: Colors.white70, fontSize: 11),
                           ),
@@ -232,6 +242,155 @@ class _SectionTitle extends StatelessWidget {
         fontWeight: FontWeight.w800,
         color: AppColors.foreground,
       ),
+    );
+  }
+}
+
+/// Home impact summary: recycled kg + CO₂ saved + faculty rank, all computed
+/// server-side and shown verbatim.
+class _ImpactAndRank extends StatelessWidget {
+  final AsyncValue<Impact?> impactAsync;
+  final AsyncValue<List<LeaderEntry>> facultyAsync;
+  final String? facultyId;
+  final String? facultyName;
+
+  const _ImpactAndRank({
+    required this.impactAsync,
+    required this.facultyAsync,
+    required this.facultyId,
+    required this.facultyName,
+  });
+
+  int? get _myRank {
+    final entries = facultyAsync.valueOrNull;
+    if (entries == null || entries.isEmpty) return null;
+    final match = facultyName != null && facultyName!.isNotEmpty
+        ? entries.indexWhere((e) => e.name == facultyName)
+        : -1;
+    return match >= 0 ? match + 1 : null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final impact = impactAsync.valueOrNull;
+    if (impact == null) return const SizedBox.shrink();
+    final rank = _myRank;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(AppRadii.card),
+        border: Border.all(color: AppColors.line.withValues(alpha: 0.6)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: _MiniStat(
+                  icon: Icons.scale_outlined,
+                  accent: AppColors.green,
+                  label: 'Recycled',
+                  value: Fmt.kilo(impact.recycledKg),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _MiniStat(
+                  icon: Icons.cloud_outlined,
+                  accent: AppColors.blue,
+                  label: 'CO₂ saved',
+                  value: Fmt.co2(impact.co2SavedKg),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _MiniStat(
+                  icon: Icons.inventory_2_outlined,
+                  accent: AppColors.deepGreen,
+                  label: 'Items',
+                  value: '${impact.itemsRecycled}',
+                ),
+              ),
+            ],
+          ),
+          if (rank != null) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppColors.rewardBg,
+                borderRadius: BorderRadius.circular(AppRadii.small),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.school_outlined,
+                      size: 15, color: AppColors.green),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '${facultyName ?? 'Your faculty'} is #$rank on the '
+                      'faculty leaderboard',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.deepGreen,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _MiniStat extends StatelessWidget {
+  final IconData icon;
+  final Color accent;
+  final String label;
+  final String value;
+
+  const _MiniStat({
+    required this.icon,
+    required this.accent,
+    required this.label,
+    required this.value,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 15, color: accent),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                value,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                  color: accent,
+                ),
+              ),
+              Text(
+                label,
+                style:
+                    const TextStyle(fontSize: 9, color: AppColors.muted),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

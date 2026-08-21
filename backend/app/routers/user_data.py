@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -10,6 +10,15 @@ from ..security import get_current_user
 from ..services import ChallengeService, ImpactService, LeaderboardService
 
 router = APIRouter(tags=["user-data"])
+
+# Pagination caps: safe defaults, hard ceilings so a huge limit cannot be
+# used to pull the whole table in one request.
+_DEFAULT_LIMIT = 20
+_MAX_LIMIT = 100
+
+
+def _page(limit: int, offset: int) -> tuple[int, int]:
+    return max(1, min(limit, _MAX_LIMIT)), max(0, offset)
 
 
 @router.get("/users/me")
@@ -23,11 +32,16 @@ def me(
 
 @router.get("/waste/history")
 def history(
-    user: User = Depends(get_current_user), db: Session = Depends(get_db)
+    limit: int = Query(_DEFAULT_LIMIT, ge=1),
+    offset: int = Query(0, ge=0),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ) -> dict:
     from .auth import faculty_name
 
-    events = WasteRepository().list_by_user(db, user.id)
+    size, skip = _page(limit, offset)
+    repo = WasteRepository()
+    events, total = repo.list_by_user_paged(db, user.id, size, skip)
     return {
         "items": [
             {
@@ -40,7 +54,10 @@ def history(
                 "created_at": e.created_at.isoformat(),
             }
             for e in events
-        ]
+        ],
+        "total": total,
+        "limit": size,
+        "offset": skip,
     }
 
 
@@ -77,10 +94,14 @@ def impact(
 @router.get("/leaderboard")
 def leaderboard(
     scope: str = "students",
+    limit: int = Query(_DEFAULT_LIMIT, ge=1),
+    offset: int = Query(0, ge=0),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict:
-    return {"entries": LeaderboardService().get_entries(db, scope)}
+    size, skip = _page(limit, offset)
+    entries, total = LeaderboardService().get_entries_paged(db, scope, size, skip)
+    return {"entries": entries, "total": total, "limit": size, "offset": skip}
 
 
 @router.get("/leaderboard/students")
@@ -99,6 +120,11 @@ def leaderboard_faculties(
 
 @router.get("/challenges")
 def challenges(
-    user: User = Depends(get_current_user), db: Session = Depends(get_db)
+    limit: int = Query(_DEFAULT_LIMIT, ge=1),
+    offset: int = Query(0, ge=0),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ) -> dict:
-    return {"items": ChallengeService().list_for_user(db, user)}
+    size, skip = _page(limit, offset)
+    items, total = ChallengeService().list_for_user_paged(db, user, size, skip)
+    return {"items": items, "total": total, "limit": size, "offset": skip}

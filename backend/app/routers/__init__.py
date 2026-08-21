@@ -1,3 +1,4 @@
+from .admin import router as admin_router
 from .ai import router as ai_router
 from .auth import router as auth_router
 from .debug import router as debug_router
@@ -7,6 +8,7 @@ from .user_data import router as user_data_router
 from .ws import router as ws_router
 
 __all__ = [
+    "admin_router",
     "ai_router",
     "auth_router",
     "debug_router",

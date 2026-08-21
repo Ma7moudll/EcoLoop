@@ -13,8 +13,11 @@ def confirm_deposit(client, auth, prediction, **kwargs) -> dict:
     )
     assert r.status_code == 200, r.text
     session = r.json()
-    r = client.post("/api/v1/deposit/callback/event",
-                    json=confirm_event(session["operation_id"], **kwargs))
+    r = client.post(
+        "/api/v1/deposit/callback/event",
+        headers={"X-Station-Key": "dev-station-key"},
+        json=confirm_event(session["operation_id"], **kwargs),
+    )
     assert r.status_code == 200, r.text
     return session
 
@@ -52,6 +55,7 @@ def test_rejected_deposit_still_in_history_with_zero_points(client, auth, plasti
     )
     session = r.json()
     client.post("/api/v1/deposit/callback/event",
+                headers={"X-Station-Key": "dev-station-key"},
                 json=confirm_event(session["operation_id"], position=2, weight=18.4,
                                    stable=True, beam=True, mech=True, carriage=2))
     r = client.get("/api/v1/waste/history", headers=auth)

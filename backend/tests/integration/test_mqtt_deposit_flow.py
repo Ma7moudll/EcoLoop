@@ -12,57 +12,15 @@ Requires a local mosquitto broker (skipped when unavailable) and the
 """
 from __future__ import annotations
 
-import socket
-import subprocess
-import tempfile
 import time
-from pathlib import Path
 
 import pytest
 
-MOSQUITTO_BIN = Path("/opt/homebrew/sbin/mosquitto")
+# The authenticated broker fixture lives in tests/integration/conftest.py.
 BROKER_HOST = "127.0.0.1"
 BROKER_PORT = 1884  # must match backend/tests/conftest.py env
-
-
-def _port_free(port: int) -> bool:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.settimeout(0.3)
-        return s.connect_ex((BROKER_HOST, port)) != 0
-
-
-@pytest.fixture(scope="module")
-def broker():
-    if not MOSQUITTO_BIN.exists():
-        pytest.skip("mosquitto not installed (expect /opt/homebrew/sbin/mosquitto)")
-
-    conf = tempfile.NamedTemporaryFile(mode="w", suffix=".conf", delete=False)
-    conf.write(
-        f"listener {BROKER_PORT}\n"
-        "allow_anonymous true\n"
-        "max_queued_messages 1000\n"
-        "message_size_limit 0\n"
-    )
-    conf.close()
-
-    proc = subprocess.Popen(
-        [str(MOSQUITTO_BIN), "-c", conf.name, "-v"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    deadline = time.time() + 15
-    while time.time() < deadline:
-        if not _port_free(BROKER_PORT):
-            break
-        time.sleep(0.1)
-    else:
-        proc.kill()
-        pytest.skip("mosquitto did not start on port %d" % BROKER_PORT)
-
-    time.sleep(0.5)  # let the listener fully accept subscriptions
-    yield BROKER_PORT
-    proc.terminate()
-    proc.wait(timeout=10)
+BROKER_USER = "backend"
+BROKER_PASS = "itest-broker-pass"  # must match backend/tests/conftest.py env
 
 
 @pytest.fixture
@@ -79,6 +37,8 @@ def simulator(broker):
     cfg = SimConfig()
     cfg.broker_host = BROKER_HOST
     cfg.broker_port = BROKER_PORT
+    cfg.mqtt_username = BROKER_USER
+    cfg.mqtt_password = BROKER_PASS
     cfg.movement_time_seconds = 0.0
 
     sim = EcoLoopSimulator(

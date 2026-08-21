@@ -3,7 +3,6 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../core/api_client.dart';
 import '../core/app_config.dart';
-import '../services/ai_classifier.dart';
 import '../services/auth_repository.dart';
 import '../services/data_repository.dart';
 import '../services/deposit_status_channel.dart';
@@ -25,10 +24,6 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
     ref.watch(apiClientProvider),
     ref.watch(secureStorageProvider),
   );
-});
-
-final aiClassifierProvider = Provider<AiClassifier>((ref) {
-  return ApiAiClassifier(ref.watch(apiClientProvider));
 });
 
 final dataRepositoryProvider = Provider<DataRepository>((ref) {

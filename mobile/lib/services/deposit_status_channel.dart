@@ -29,6 +29,8 @@ class DepositStatusChannel {
 
   /// Bandwidth-friendly live status string for the waiting UI.
   static String phaseLabel(DepositStatus status) => switch (status) {
+        DepositStatus.capture => 'Waiting for the station camera…',
+        DepositStatus.analyzing => 'Analyzing the item…',
         DepositStatus.pending => 'Waiting for the station…',
         DepositStatus.routing => 'Routing the item…',
         DepositStatus.moving => 'Moving to the compartment…',

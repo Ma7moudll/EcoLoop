@@ -48,6 +48,12 @@ final leaderboardProvider =
   return ref.watch(dataRepositoryProvider).fetchLeaderboard(scope: scope);
 });
 
+final stationsProvider = FutureProvider.autoDispose<List<Station>>((ref) async {
+  final userId = ref.watch(currentUserIdProvider);
+  if (userId == null) return const [];
+  return ref.watch(dataRepositoryProvider).fetchStations();
+});
+
 /// Invalidates everything that depends on a points-changing deposit.
 void invalidateData(WidgetRef ref) {
   for (final provider in [
@@ -56,6 +62,7 @@ void invalidateData(WidgetRef ref) {
     historyProvider,
     challengesProvider,
     leaderboardProvider,
+    stationsProvider,
   ]) {
     ref.invalidate(provider);
   }
