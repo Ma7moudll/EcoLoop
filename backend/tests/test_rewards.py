@@ -608,3 +608,228 @@ def test_parallel_cancels_through_http_refund_exactly_once(client, student):
     assert outcomes.count(200) == 1, f"exactly one winner: {outcomes}"
     assert all(code in (409, 422) for code in outcomes if code != 200)
     assert _balance() == after_redeem + 60, "exactly one refund under contention"
+
+
+# -- stock reservation/restoration lifecycle --------------------------------------
+#
+# Invariant: available stock + active reservations + consumed inventory
+# equals original inventory. A redemption reserves one unit; cancelling or
+# rejecting an UNUSED redemption returns that unit; consumption never does.
+# Restoration rides the same winning atomic transition as the refund, so a
+# unit can never be returned twice.
+
+
+def _make_limited_code_reward(stock):
+    with SessionLocal() as db:
+        from app.models import Reward
+
+        row = db.get(Reward, "rw-limited-code")
+        if row is not None:
+            row.stock = stock
+        else:
+            db.add(
+                Reward(
+                    id="rw-limited-code",
+                    category="food",
+                    name="Limited Coffee",
+                    description="",
+                    provider="MIX",
+                    points_cost=60,
+                    value_label="20% OFF",
+                    currency="EGP",
+                    icon="local_cafe",
+                    is_active=True,
+                    stock=stock,
+                    requires_destination=False,
+                )
+            )
+        db.commit()
+    return "rw-limited-code"
+
+
+def _make_limited_cash_reward(stock):
+    with SessionLocal() as db:
+        from app.models import Reward
+
+        db.add(
+            Reward(
+                id="rw-limited-cash",
+                category="cash",
+                name="Limited Cashout",
+                description="",
+                provider="Vodafone",
+                points_cost=50,
+                value_label="5 EGP VC",
+                currency="EGP",
+                icon="card_giftcard",
+                is_active=True,
+                stock=stock,
+                requires_destination=True,
+            )
+        )
+        db.commit()
+    return "rw-limited-cash"
+
+
+def _stock(reward_id):
+    with SessionLocal() as db:
+        from app.models import Reward
+
+        return db.get(Reward, reward_id).stock
+
+
+def _redeem_limited(client, student, reward_id, key, dest=None, points=100):
+    _set_points("u-reward", points)
+    r = client.post(
+        "/api/v1/rewards/%s/redeem" % reward_id,
+        headers=student,
+        json=dict(idempotency_key=key, **({"destination": dest} if dest else {})),
+    )
+    assert r.status_code == 200, r.text
+    return r.json()["redemption"]
+
+
+def test_redeem_decrements_stock_exactly_once(client, student):
+    _make_limited_code_reward(10)
+    _redeem_limited(client, student, "rw-limited-code", "stock-dec-0000001")
+    assert _stock("rw-limited-code") == 9
+
+
+def test_cancel_restores_reserved_stock(client, student):
+    _make_limited_code_reward(10)
+    rd = _redeem_limited(client, student, "rw-limited-code", "stock-can-0000001")
+    assert _stock("rw-limited-code") == 9
+
+    r = client.post("/api/v1/rewards/redemptions/%s/cancel" % rd["id"], headers=student)
+    assert r.status_code == 200
+    assert _stock("rw-limited-code") == 10, "cancelled reservation must return"
+    assert _balance() == 100, "refunded exactly once (100 -> 40 -> 100)"
+
+
+def test_admin_reject_restores_reserved_stock(client, student):
+    from app.models import RewardRedemption
+    from app.services.reward_service import admin_reject
+
+    _make_limited_cash_reward(10)
+    rd = _redeem_limited(
+        client, student, "rw-limited-cash", "stock-rej-0000001", dest="01012345678"
+    )
+    assert _stock("rw-limited-cash") == 9
+    before = _balance()
+
+    with SessionLocal() as s:
+        admin_reject(s, s.get(RewardRedemption, rd["id"]), "cannot fulfill")
+
+    assert _stock("rw-limited-cash") == 10, "rejected reservation must return"
+    assert _balance() == before + 50, "refunded exactly once"
+
+
+def test_used_redemption_never_restores_stock(client, student):
+    _admin_headers(client)
+    _make_limited_code_reward(10)
+    rd = _redeem_limited(client, student, "rw-limited-code", "stock-use-0000001")
+
+    r = client.post(
+        "/api/v1/admin/rewards/redemptions/%s/mark-used" % rd["id"],
+        headers=_admin_headers(client),
+    )
+    assert r.status_code == 200
+    assert _stock("rw-limited-code") == 9, "consumed inventory stays consumed"
+
+    # A used code can no longer be cancelled into a second refund/restore.
+    lost = client.post(
+        "/api/v1/rewards/redemptions/%s/cancel" % rd["id"], headers=student
+    )
+    assert lost.status_code == 422
+    assert _stock("rw-limited-code") == 9
+
+
+def test_concurrent_cancels_restore_stock_exactly_once(client, student):
+    from app.models import RewardRedemption
+    from app.services.reward_service import user_cancel_available
+
+    _make_limited_code_reward(10)
+    rd = _redeem_limited(client, student, "rw-limited-code", "stock-racec-00001")
+
+    with SessionLocal() as loser:
+        stale = loser.get(RewardRedemption, rd["id"])
+        assert stale.status == "available"
+
+        with SessionLocal() as winner:
+            user_cancel_available(winner, winner.get(RewardRedemption, rd["id"]))
+
+        with pytest.raises(RewardError):
+            user_cancel_available(loser, stale)
+
+    assert _stock("rw-limited-code") == 10, "one restore, never two (S+1)"
+    assert _balance() == 100, "one refund, never two"
+
+
+def test_concurrent_rejects_restore_stock_exactly_once(client, student):
+    from app.models import RewardRedemption
+    from app.services.reward_service import admin_reject
+
+    _make_limited_cash_reward(10)
+    rd = _redeem_limited(
+        client, student, "rw-limited-cash", "stock-racer-00001", dest="01012345678"
+    )
+    before = _balance()
+
+    with SessionLocal() as loser:
+        stale = loser.get(RewardRedemption, rd["id"])
+        assert stale.status == "pending"
+
+        with SessionLocal() as winner:
+            admin_reject(winner, winner.get(RewardRedemption, rd["id"]), "winner")
+
+        with pytest.raises(RewardError):
+            admin_reject(loser, stale, "loser")
+
+    assert _stock("rw-limited-cash") == 10, "one restore, never two"
+    assert _balance() == before + 50, "one refund, never two"
+
+
+def test_cancel_vs_mark_used_stock_semantics(client, student):
+    """If cancellation wins the race the unit returns; if consumption wins it
+    never does. Stock can never exceed S either way."""
+    _admin_headers(client)
+    _make_limited_code_reward(10)
+    rd = _redeem_limited(client, student, "rw-limited-code", "stock-cxu-0000001")
+
+    win = client.post(
+        "/api/v1/rewards/redemptions/%s/cancel" % rd["id"], headers=student
+    )
+    assert win.status_code == 200
+    lost = client.post(
+        "/api/v1/admin/rewards/redemptions/%s/mark-used" % rd["id"],
+        headers=_admin_headers(client),
+    )
+    assert lost.status_code == 409
+    assert _stock("rw-limited-code") == 10, "cancel won: restored exactly once"
+
+    _make_limited_code_reward(10)  # reset stock for round two
+    rd2 = _redeem_limited(client, student, "rw-limited-code", "stock-cxu-0000002")
+    used = client.post(
+        "/api/v1/admin/rewards/redemptions/%s/mark-used" % rd2["id"],
+        headers=_admin_headers(client),
+    )
+    assert used.status_code == 200
+    lost2 = client.post(
+        "/api/v1/rewards/redemptions/%s/cancel" % rd2["id"], headers=student
+    )
+    assert lost2.status_code == 422
+    assert _stock("rw-limited-code") == 9, "consumption won: unit stays consumed"
+    assert _balance() == 40, "no refund when consumption wins"
+
+
+def test_insufficient_stock_refuses_cleanly(client, student):
+    _make_limited_code_reward(0)
+    before = _balance()
+    r = client.post(
+        "/api/v1/rewards/rw-limited-code/redeem",
+        headers=student,
+        json={"idempotency_key": "stock-zero-00000001"},
+    )
+    assert r.status_code in (409, 422), r.text
+    assert _stock("rw-limited-code") == 0, "failed redeem must not touch stock"
+    assert _balance() == before, "failed redeem must not touch points"

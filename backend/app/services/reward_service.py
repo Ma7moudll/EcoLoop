@@ -62,6 +62,20 @@ def _status_for(reward: Reward) -> str:
     return "available"
 
 
+def _restore_reserved_stock(db: Session, reward_id: str) -> None:
+    """Return one reserved unit to a limited-stock reward.
+
+    Called ONLY from inside a transaction that won the atomic status
+    transition (cancelled/rejected), so exactly one unit is restored per
+    redemption no matter how many competing attempts occur. Unlimited-stock
+    rewards (stock IS NULL) match zero rows and stay unlimited."""
+    db.execute(
+        update(Reward)
+        .where(Reward.id == reward_id, Reward.stock.is_not(None))
+        .values(stock=Reward.stock + 1)
+    )
+
+
 def redeem(
     db: Session,
     *,
@@ -177,6 +191,9 @@ def admin_reject(db: Session, redemption: RewardRedemption, note: str) -> None:
     redemption.status = "rejected"
     redemption.admin_note = note[:512]
     redemption.fulfilled_at = datetime.now(timezone.utc)
+    # The rejected payout never left inventory — restore the reserved unit
+    # in the same transaction as the transition and the refund.
+    _restore_reserved_stock(db, redemption.reward_id)
     db.commit()
 
 
@@ -205,4 +222,7 @@ def user_cancel_available(db: Session, redemption: RewardRedemption) -> None:
         .where(User.id == redemption.user_id)
         .values(points=User.points + redemption.points_spent)
     )
+    # The unused code's reserved unit goes back on the shelf — atomically
+    # with the transition and the refund (single commit below).
+    _restore_reserved_stock(db, redemption.reward_id)
     db.commit()
