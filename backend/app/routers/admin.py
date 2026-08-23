@@ -868,6 +868,15 @@ def fulfill_redemption(
     from datetime import datetime, timezone as tz
 
     rd = _load_redemption(db, redemption_id)
+    reward = db.get(Reward, rd.reward_id)
+    if reward is None or reward.category != "cash":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Only cash payouts are fulfilled by admins. "
+                "Code rewards are consumed via mark-used."
+            ),
+        )
     if rd.status not in {"pending", "approved"}:
         raise HTTPException(
             status_code=409,

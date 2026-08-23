@@ -97,6 +97,16 @@ fi
 
 if is_service_up "$API_PORT" "backend"; then :; else
   echo "[dev_up] starting backend on :$API_PORT (config-only seed, no demo user)"
+  # Stable strong dev JWT secret: generated once, reused across restarts so
+  # student sessions survive. Override by exporting JWT_SECRET. NEVER committed.
+  if [ -z "${JWT_SECRET:-}" ]; then
+    JWT_FILE="$ROOT/.dev-jwt-secret"
+    if [ ! -f "$JWT_FILE" ]; then
+      "$VENV" -c 'import secrets; print(secrets.token_hex(32))' > "$JWT_FILE"
+      chmod 600 "$JWT_FILE"
+    fi
+    JWT_SECRET="$(cat "$JWT_FILE")"
+  fi
   PYTHONPATH="$ROOT/backend" \
   DATABASE_URL="postgresql+psycopg2://recycle:recycle@localhost:5432/recycle_vision" \
   MQTT_BROKER_HOST=127.0.0.1 \
@@ -104,7 +114,7 @@ if is_service_up "$API_PORT" "backend"; then :; else
   MQTT_USERNAME="$MQTT_DEV_USER" \
   MQTT_PASSWORD="$MQTT_DEV_PASS" \
   AI_SERVICE_URL="http://127.0.0.1:$AI_PORT" \
-  JWT_SECRET="dev-secret-not-for-prod" \
+  JWT_SECRET="$JWT_SECRET" \
   SEED_ON_STARTUP=true \
   SEED_DEMO_USER=false \
   "$VENV" -m uvicorn app.main:app --host 0.0.0.0 --port "$API_PORT" --log-level info \

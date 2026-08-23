@@ -37,3 +37,7 @@ ai-service/models/*.onnx
 infra/mosquitto/passwd
 .dev-mosquitto.passwd
 .dev-mosquitto.acl
+
+# Dev stack generated secrets (NEVER commit)
+.dev-jwt-secret
+backups/

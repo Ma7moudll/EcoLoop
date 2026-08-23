@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..models import Challenge, User, UserChallenge, WasteEvent
@@ -46,6 +47,11 @@ class ChallengeService:
         persisted atomically; the unique (user_id, challenge_id) constraint
         makes a duplicate reward impossible even under concurrent events.
 
+        A concurrent deposit that completes the SAME challenge in a parallel
+        transaction wins the unique row; the loser catches the IntegrityError
+        and treats the challenge as already claimed — the caller's base-point
+        award is never rolled back because of a bonus race.
+
         Returns the total bonus points awarded by THIS call (0 when nothing
         newly completed)."""
         progress = self._progress(db, user)
@@ -62,34 +68,39 @@ class ChallengeService:
                 continue
             if progress.get(waste_class, 0.0) < challenge.target_kg:
                 continue
-            if challenge.reward_points <= 0:
-                # Nothing to award; still persist completion for the UI.
-                db.add(
-                    UserChallenge(
-                        id=UserChallenge.new_id(),
-                        user_id=user.id,
-                        challenge_id=challenge.id,
-                        reward_points=0,
+            reward_points = challenge.reward_points
+            try:
+                # Savepoint: a unique-constraint loss rolls back ONLY the
+                # bonus insert, never the deposit's base points already
+                # written by the caller.
+                with db.begin_nested():
+                    db.add(
+                        UserChallenge(
+                            id=UserChallenge.new_id(),
+                            user_id=user.id,
+                            challenge_id=challenge.id,
+                            reward_points=0 if reward_points <= 0 else reward_points,
+                        )
                     )
+                    db.flush()
+            except IntegrityError:
+                logger.info(
+                    "[CHALLENGE] already claimed concurrently challenge=%s user=%s",
+                    challenge.id, user.id,
                 )
+                continue
+            if reward_points <= 0:
+                # Nothing to award; completion still persisted for the UI.
                 logger.info(
                     "[CHALLENGE] completed (no reward) challenge=%s user=%s",
                     challenge.id, user.id,
                 )
                 continue
-            db.add(
-                UserChallenge(
-                    id=UserChallenge.new_id(),
-                    user_id=user.id,
-                    challenge_id=challenge.id,
-                    reward_points=challenge.reward_points,
-                )
-            )
-            user.points += challenge.reward_points
-            bonus += challenge.reward_points
+            user.points += reward_points
+            bonus += reward_points
             logger.info(
                 "[CHALLENGE] completed challenge=%s user=%s reward=%s",
-                challenge.id, user.id, challenge.reward_points,
+                challenge.id, user.id, reward_points,
             )
         return bonus
 

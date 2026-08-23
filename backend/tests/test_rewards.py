@@ -833,3 +833,84 @@ def test_insufficient_stock_refuses_cleanly(client, student):
     assert r.status_code in (409, 422), r.text
     assert _stock("rw-limited-code") == 0, "failed redeem must not touch stock"
     assert _balance() == before, "failed redeem must not touch points"
+
+
+# -- challenge bonus race (#3): losing a concurrent completion must never
+# roll back the deposit's base points. The loser's UserChallenge insert hits
+# the unique constraint inside a SAVEPOINT; only the bonus insert is undone.
+
+
+def _make_tiny_challenge(client, admin_auth, title):
+    r = client.post(
+        "/api/v1/admin/challenges", headers=admin_auth,
+        json={
+            "title": title, "description": "race", "theme_emoji": "🧲",
+            "waste_class": "plastic", "target_kg": 0.001, "reward_points": 5,
+        },
+    )
+    assert r.status_code == 200, r.text
+    return r.json()["id"]
+
+
+def test_concurrent_challenge_completion_keeps_base_points(
+    client, admin_auth, auth, plastic_prediction
+):
+    """Deposit first, THEN create the challenge (progress >= target but never
+    completed). Two transactions now race to claim it; the loser must keep its
+    simulated base-point award and produce zero bonus."""
+    from sqlalchemy import select
+
+    from app.database import SessionLocal
+    from app.models import Challenge as ChallengeModel
+    from app.models import User, UserChallenge
+    from app.services.challenge_service import ChallengeService
+
+    from .test_user_data import confirm_deposit
+
+    confirm_deposit(client, auth, plastic_prediction)  # crosses 0.001 kg target
+    cid = _make_tiny_challenge(client, admin_auth, "Race Bonus")
+
+    with SessionLocal() as winner:
+        wuser = winner.execute(
+            select(User).where(User.email == "demo@recycle.vision")
+        ).scalar_one()
+        bonus_w = ChallengeService().on_deposit_confirmed(winner, wuser, "plastic")
+        winner.commit()
+    assert bonus_w == 5
+
+    # Loser holds a stale session that has NOT seen the winner's row.
+    with SessionLocal() as loser:
+        luser = loser.execute(
+            select(User).where(User.email == "demo@recycle.vision")
+        ).scalar_one()
+        base = luser.points          # includes everything committed so far
+        luser.points += 7            # simulate this deposit's BASE award
+        bonus_l = ChallengeService().on_deposit_confirmed(loser, luser, "plastic")
+        assert bonus_l == 0, "loser must not double-claim the bonus"
+        loser.commit()
+
+        refreshed = loser.get(User, luser.id)
+        assert refreshed.points == base + 7, (
+            "base award must survive the lost bonus race"
+        )
+
+    rows = SessionLocal().execute(
+        select(UserChallenge).where(UserChallenge.challenge_id == cid)
+    ).scalars().all()
+    assert len(rows) == 1, "exactly one completion row"
+
+
+def test_fulfill_is_cash_only(client, student, admin_auth):
+    """Code rewards are consumed by merchants (mark-used), never 'fulfilled'
+    by admins — the two lifecycles can no longer be mixed up."""
+    rd_id = _redeem_code(client, student, "fulfill-cash-only-00001")
+    r = client.post(
+        f"/api/v1/admin/rewards/redemptions/{rd_id}/fulfill", headers=admin_auth, json={}
+    )
+    assert r.status_code == 409, r.text
+
+    # the code path still works end to end
+    used = client.post(
+        f"/api/v1/admin/rewards/redemptions/{rd_id}/mark-used", headers=admin_auth
+    )
+    assert used.status_code == 200 and used.json()["status"] == "used"
