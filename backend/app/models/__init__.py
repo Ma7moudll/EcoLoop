@@ -6,6 +6,7 @@ from .deposit_session import DepositSession
 from .faculty import Faculty
 from .leaderboard_entry import LeaderboardEntry
 from .operation_counter import OperationCounter
+from .reward import Reward, RewardRedemption
 from .routing_policy import RoutingPolicy
 from .station import Station
 from .user import User
@@ -20,6 +21,8 @@ __all__ = [
     "Faculty",
     "LeaderboardEntry",
     "OperationCounter",
+    "Reward",
+    "RewardRedemption",
     "RoutingPolicy",
     "Station",
     "User",
