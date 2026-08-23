@@ -83,6 +83,7 @@ let TOKEN = null;
 let currentTab = 'overview';
 let LAST_REWARDS = [];
 let LAST_USERS = [];
+let LAST_FACULTIES = [];
 let LAST_STATIONS = [];
 let LAST_CHALLENGES = [];
 
@@ -251,6 +252,21 @@ async function delReward(i){
   await run(async ()=>{ const rr=await send('DELETE','/admin/rewards/'+r.id); alert('Deleted '+(rr.deleted||r.id)); });
 }
 
+async function addFacultyPrompt(){
+  const n = ask('Faculty name:'); if(n===undefined||!n) return;
+  await run(async ()=>{ await send('POST','/admin/faculties',{name:n.trim()}); alert('Faculty added.'); });
+}
+async function renameFaculty(i){
+  const f = LAST_FACULTIES[i]; if(!f) return;
+  const n = ask('Rename faculty:', f.name); if(n===undefined||!n) return;
+  await run(async ()=>{ await send('PATCH','/admin/faculties/'+f.id,{name:n.trim()}); });
+}
+async function delFaculty(i){
+  const f = LAST_FACULTIES[i]; if(!f) return;
+  if(!confirm('Delete faculty "'+f.name+'"? Only faculties with no students can be deleted.')) return;
+  await run(async ()=>{ const r=await send('DELETE','/admin/faculties/'+f.id); alert('Deleted '+(r.deleted||f.id)); });
+}
+
 const SECTIONS = ['overview','faculties','students','stations','deposits','challenges','rewards','health'];
 function buildTabs() {
   const nav = document.getElementById('tabs');
@@ -331,8 +347,13 @@ async function render(s) {
   }
   else if (s==='faculties') {
     const d = await api('/admin/faculties');
-    el.innerHTML = table(['Rank','Faculty','Students','Points','Recycled kg','Items'],
-      d.items.map(f=>[f.rank, esc(f.name), f.students, f.points, f.recycled_kg, f.items]));
+    LAST_FACULTIES = d.items || [];
+    el.innerHTML =
+      '<div style="margin-bottom:8px"><button style="width:auto;margin:0" onclick="addFacultyPrompt()">+ Add faculty</button></div>'+
+      table(['Rank','Faculty','Students','Points','Recycled kg','Items','Actions'],
+        d.items.map((f,i)=>[f.rank, esc(f.name), f.students, f.points, f.recycled_kg, f.items,
+          '<button style="width:auto;margin:2px" onclick="renameFaculty('+i+')">Rename</button>'+
+          (f.students===0?'<button style="width:auto;margin:2px" onclick="delFaculty('+i+')">Delete</button>':'')]));
   }
   else if (s==='students') {
     const q = document.getElementById('q-students')?.value || '';

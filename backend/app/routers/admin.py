@@ -9,11 +9,11 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, field_validator
-from sqlalchemy import func as sa_func, select, update
+from sqlalchemy import delete as sa_delete, func as sa_func, select, update
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import AuthToken, Challenge, DepositSession, Reward, RewardRedemption, Station, User, UserChallenge
+from ..models import AuthToken, Challenge, DepositSession, Faculty, Reward, RewardRedemption, Station, User, UserChallenge
 from ..security import require_admin
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_admin)])
@@ -442,6 +442,112 @@ def faculty_stats(db: Session = Depends(get_db)) -> dict:
     for rank, entry in enumerate(items, start=1):
         entry["rank"] = rank
     return {"items": items}
+
+
+class FacultyCreate(BaseModel):
+    name: str
+
+    @field_validator("name")
+    @classmethod
+    def _name(cls, v: str) -> str:
+        v = v.strip()
+        if not 2 <= len(v) <= 128:
+            raise ValueError("Faculty name must be 2-128 characters.")
+        return v
+
+
+class FacultyRename(BaseModel):
+    name: str
+
+    @field_validator("name")
+    @classmethod
+    def _name(cls, v: str) -> str:
+        v = v.strip()
+        if not 2 <= len(v) <= 128:
+            raise ValueError("Faculty name must be 2-128 characters.")
+        return v
+
+
+def _faculty_slug(db: Session, name: str) -> str:
+    """Stable uppercase-underscore id derived from the name (ENGINEERING
+    style), suffixed on collision."""
+    base = "".join(ch if ch.isalnum() else "_" for ch in name.upper())
+    base = "_".join(part for part in base.split("_") if part) or "FACULTY"
+    candidate = base[:60]
+    suffix = 2
+    while db.get(Faculty, candidate) is not None:
+        candidate = f"{base[:56]}-{suffix}"
+        suffix += 1
+    return candidate
+
+
+@router.post("/faculties")
+def create_faculty(payload: FacultyCreate, db: Session = Depends(get_db)) -> dict:
+    existing = db.execute(
+        select(Faculty).where(Faculty.name == payload.name)
+    ).scalar_one_or_none()
+    if existing is not None:
+        raise HTTPException(status_code=409, detail="A faculty with this name already exists.")
+    faculty = Faculty(id=_faculty_slug(db, payload.name), name=payload.name)
+    db.add(faculty)
+    db.commit()
+    db.refresh(faculty)
+    return {"id": faculty.id, "name": faculty.name}
+
+
+@router.patch("/faculties/{faculty_id}")
+def rename_faculty(
+    faculty_id: str, payload: FacultyRename, db: Session = Depends(get_db)
+) -> dict:
+    faculty = db.get(Faculty, faculty_id)
+    if faculty is None:
+        raise HTTPException(status_code=404, detail="This faculty could not be found.")
+    clash = db.execute(
+        select(Faculty).where(Faculty.name == payload.name, Faculty.id != faculty_id)
+    ).scalar_one_or_none()
+    if clash is not None:
+        raise HTTPException(status_code=409, detail="A faculty with this name already exists.")
+    faculty.name = payload.name
+    # The faculty leaderboard row carries the display name.
+    from ..models import LeaderboardEntry
+
+    lb = db.execute(
+        select(LeaderboardEntry).where(
+            LeaderboardEntry.scope == "faculties",
+            LeaderboardEntry.entity_id == faculty_id,
+        )
+    ).scalar_one_or_none()
+    if lb is not None:
+        lb.name = payload.name
+    db.commit()
+    return {"id": faculty.id, "name": faculty.name}
+
+
+@router.delete("/faculties/{faculty_id}")
+def delete_faculty(faculty_id: str, db: Session = Depends(get_db)) -> dict:
+    faculty = db.get(Faculty, faculty_id)
+    if faculty is None:
+        raise HTTPException(status_code=404, detail="This faculty could not be found.")
+    enrolled = (
+        db.execute(select(sa_func.count()).select_from(User).where(User.faculty_id == faculty_id))
+        .scalar_one()
+    )
+    if int(enrolled) > 0:
+        raise HTTPException(
+            status_code=409,
+            detail="Faculty still has students — move them to another faculty first.",
+        )
+    from ..models import LeaderboardEntry
+
+    db.execute(
+        sa_delete(LeaderboardEntry).where(
+            LeaderboardEntry.scope == "faculties",
+            LeaderboardEntry.entity_id == faculty_id,
+        )
+    )
+    db.delete(faculty)
+    db.commit()
+    return {"deleted": faculty_id}
 
 
 @router.get("/stations")

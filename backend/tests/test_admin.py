@@ -362,3 +362,45 @@ def test_admin_cannot_delete_joined_challenge(
 
     r = client.delete(f"/api/v1/admin/challenges/{cid}", headers=admin_auth)
     assert r.status_code == 409
+
+
+def test_faculty_crud_lifecycle(client, admin_auth):
+    # create -> slug id, listed
+    r = client.post(
+        "/api/v1/admin/faculties", headers=admin_auth,
+        json={"name": "Marine Biology"},
+    )
+    assert r.status_code == 200, r.text
+    fid = r.json()["id"]
+    assert fid == "MARINE_BIOLOGY"
+
+    # duplicate name refused
+    assert client.post(
+        "/api/v1/admin/faculties", headers=admin_auth,
+        json={"name": "Marine Biology"},
+    ).status_code == 409
+
+    # rename updates the faculty AND its leaderboard row name
+    assert client.patch(
+        f"/api/v1/admin/faculties/{fid}", headers=admin_auth,
+        json={"name": "Marine Sciences"},
+    ).status_code == 200
+    names = [f["name"] for f in client.get(
+        "/api/v1/admin/faculties", headers=admin_auth).json()["items"]]
+    assert "Marine Sciences" in names
+
+    # delete empty faculty works; deleting one with students is refused
+    from .conftest import register_and_login
+
+    register_and_login(client, "faculty-guard@uni.edu")  # ENGINEERING by default
+    assert client.delete(
+        "/api/v1/admin/faculties/ENGINEERING", headers=admin_auth
+    ).status_code == 409
+
+    assert client.delete(f"/api/v1/admin/faculties/{fid}", headers=admin_auth).status_code == 200
+    ids = [f["id"] for f in client.get(
+        "/api/v1/admin/faculties", headers=admin_auth).json()["items"]]
+    assert fid not in ids
+
+    # student/anonymous are locked out
+    assert client.get("/api/v1/admin/faculties").status_code == 401

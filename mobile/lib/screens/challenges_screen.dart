@@ -38,34 +38,38 @@ class ChallengesScreen extends ConsumerWidget {
           final active = items.where((c) => c.active).toList();
           final completed = items.where((c) => c.completed).toList();
 
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-            children: [
-              if (active.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8),
-                  child: Text(
-                    'No active challenges. Keep recycling!',
+          return RefreshIndicator(
+            onRefresh: () async => ref.invalidate(challengesProvider),
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+              children: [
+                if (active.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: Text(
+                      'No active challenges. Keep recycling!',
+                      style: TextStyle(
+                          fontSize: 12, color: AppColors.muted),
+                    ),
+                  )
+                else
+                  for (final c in active) ChallengeCard(challenge: c),
+                if (completed.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  const Text(
+                    'Completed',
                     style: TextStyle(
-                        fontSize: 12, color: AppColors.muted),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.foreground,
+                    ),
                   ),
-                )
-              else
-                for (final c in active) ChallengeCard(challenge: c),
-              if (completed.isNotEmpty) ...[
-                const SizedBox(height: 10),
-                const Text(
-                  'Completed',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.foreground,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                for (final c in completed) ChallengeCard(challenge: c),
+                  const SizedBox(height: 8),
+                  for (final c in completed) ChallengeCard(challenge: c),
+                ],
               ],
-            ],
+            ),
           );
         },
       ),
