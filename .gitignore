@@ -3,7 +3,10 @@
 build/
 .flutter-plugins*
 .packages
-pubspec.lock
+# Dart lock file: excluded for library packages only (see shared/.gitignore).
+# The Flutter application (mobile/) MUST commit its pubspec.lock.
+# Run `flutter pub get` in mobile/ then `git add mobile/pubspec.lock`.
+shared/pubspec.lock
 
 # Server runtime state (seeded on boot; never committed)
 server/data/
@@ -25,6 +28,7 @@ server/data/
 # ML training artifacts (dataset, checkpoints — never committed)
 ai-service/data/
 ai-service/models/*.pt
+ai-service/models/*.onnx
 
 # OS
 .DS_Store

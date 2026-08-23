@@ -33,7 +33,7 @@ PGPASSWORD=recycle psql -h localhost -U recycle -lqt 2>/dev/null | cut -d'|' -f1
 
 port_in_use() { nc -z 127.0.0.1 "$1" 2>/dev/null; }
 
-stop_one() {
+is_service_up() {
   local port="$1" name="$2"
   if port_in_use "$port"; then
     local pid; pid="$(lsof -nP -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null | head -1 || true)"
@@ -53,10 +53,14 @@ MQTT_DEV_USER="backend"
 PASSWD_FILE="$ROOT/.dev-mosquitto.passwd"
 ACL_FILE="$ROOT/.dev-mosquitto.acl"
 
-if stop_one "$MQTT_PORT" "mosquitto"; then
+if is_service_up "$MQTT_PORT" "mosquitto"; then
   # Broker already up: credentials must come from the caller's environment.
   MQTT_DEV_PASS="${MQTT_PASSWORD:-}"
-  [ -n "$MQTT_DEV_PASS" ] || echo "[dev_up] WARNING: broker already running; set MQTT_USERNAME/MQTT_PASSWORD for the backend"
+  if [ -z "$MQTT_DEV_PASS" ]; then
+    echo "FATAL: broker already running but MQTT_PASSWORD is not set."
+    echo "       Export MQTT_PASSWORD before running dev_up.sh, or stop the existing broker."
+    exit 1
+  fi
 else
   MQTT_DEV_PASS="$(python3 -c 'import secrets;print(secrets.token_urlsafe(24))')"
   echo "[dev_up] starting mosquitto on :$MQTT_PORT (authenticated)"
@@ -68,6 +72,7 @@ user $MQTT_DEV_USER
 topic readwrite ecoloop/stations/#
 EOF
   CONF="$(mktemp)"
+  trap "rm -f '$CONF'" EXIT
   cat > "$CONF" <<EOF
 listener $MQTT_PORT 127.0.0.1
 allow_anonymous false
@@ -80,7 +85,7 @@ EOF
   for _ in $(seq 1 30); do port_in_use "$MQTT_PORT" && break; sleep 0.2; done
 fi
 
-if stop_one "$AI_PORT" "ai-service"; then :; else
+if is_service_up "$AI_PORT" "ai-service"; then :; else
   echo "[dev_up] starting ai-service (REAL classifier) on :$AI_PORT"
   PYTHONPATH="$ROOT/ai-service" \
   AI_SERVICE_CLASSIFIER=real \
@@ -90,7 +95,7 @@ if stop_one "$AI_PORT" "ai-service"; then :; else
   for _ in $(seq 1 60); do port_in_use "$AI_PORT" && break; sleep 0.3; done
 fi
 
-if stop_one "$API_PORT" "backend"; then :; else
+if is_service_up "$API_PORT" "backend"; then :; else
   echo "[dev_up] starting backend on :$API_PORT (config-only seed, no demo user)"
   PYTHONPATH="$ROOT/backend" \
   DATABASE_URL="postgresql+psycopg2://recycle:recycle@localhost:5432/recycle_vision" \

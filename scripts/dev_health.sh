@@ -59,8 +59,9 @@ import json, sys, httpx
 port = sys.argv[1]
 c = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=20)
 email = "health@recycle.dev"
-r = c.post("/api/v1/auth/register", json={"name":"Health Probe","email":email,"password":"health123"})
-if r.status_code == 409:
+r = c.post("/api/v1/auth/register", json={"name":"Health Probe","email":email,"password":"health123","facultyId":"ENGINEERING","studentCode":"S-HEALTH"})
+# Registration creates the account only — an explicit login mints the session.
+if r.status_code == 201 or r.status_code == 409:
     r = c.post("/api/v1/auth/login", json={"email":email,"password":"health123"})
 if r.status_code != 200:
     sys.exit(1)

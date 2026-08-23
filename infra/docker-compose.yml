@@ -1,15 +1,11 @@
-# EcoLoop / Recycle Vision — full local stack.
+# EcoLoop / Recycle Vision — full local stack using HiveMQ Cloud as MQTT broker.
 #   docker compose -f infra/docker-compose.yml up --build
 #
-# The hardware simulator runs on the host (or the `simulator` profile below)
-# because it is the process that will become the real ESP32 firmware.
+# MQTT: this stack connects to HiveMQ Cloud (TLS, port 8883). No local broker
+# is required. Credentials come from environment variables / .env file.
 #
-# SECRETS: JWT_SECRET / MQTT_PASSWORD / STATION_API_KEY are read from the
-# environment (or an .env file next to this compose file) — never hardcoded.
-# The mosquitto container mounts infra/mosquitto/mosquitto.conf which REQUIRES
-# authentication (allow_anonymous false); provision the password file with:
-#   mosquitto_passwd -c infra/mosquitto/passwd backend
-# (the passwd file is git-ignored; ACL is infra/mosquitto/acl).
+# SECRETS: Copy infra/.env.example → infra/.env and fill in your values.
+# JWT_SECRET and STATION_API_KEY must be set before starting.
 
 services:
   db:
@@ -17,7 +13,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: recycle
-      POSTGRES_PASSWORD: recycle
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-recycle}
       POSTGRES_DB: recycle_vision
     ports:
       - "127.0.0.1:5432:5432"
@@ -34,24 +30,6 @@ services:
         limits:
           memory: 512M
 
-  mosquitto:
-    image: eclipse-mosquitto:2
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:1883:1883"
-    volumes:
-      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
-      - ./mosquitto/acl:/mosquitto/acl:ro
-      - ./mosquitto/passwd:/mosquitto/passwd:ro
-    healthcheck:
-      # Authenticated broker: the healthcheck must authenticate too.
-      test: ["CMD-SHELL", "mosquitto_sub -h localhost -u backend -P \"$$MQTT_PASSWORD\" -t '$$SYS/broker/version' -C 1 -W 3"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-    environment:
-      MQTT_PASSWORD: ${MQTT_PASSWORD:?set MQTT_PASSWORD in your environment}
-
   ai-service:
     build: ../ai-service
     restart: unless-stopped
@@ -61,7 +39,11 @@ services:
     ports:
       - "127.0.0.1:8051:8051"
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://localhost:8051/health', timeout=2)\" || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          'python -c "import urllib.request;urllib.request.urlopen(''http://localhost:8051/health'', timeout=2)" || exit 1',
+        ]
       interval: 10s
       timeout: 3s
       retries: 10
@@ -76,26 +58,25 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      mosquitto:
-        condition: service_healthy
       ai-service:
-        condition: service_started
+        condition: service_healthy
     environment:
-      DATABASE_URL: postgresql+psycopg2://recycle:recycle@db:5432/recycle_vision
-      MQTT_BROKER_HOST: mosquitto
-      MQTT_BROKER_PORT: "1883"
-      MQTT_USERNAME: backend
-      MQTT_PASSWORD: ${MQTT_PASSWORD:?set MQTT_PASSWORD in your environment}
+      DATABASE_URL: postgresql+psycopg2://recycle:${POSTGRES_PASSWORD:-recycle}@db:5432/recycle_vision
+      # HiveMQ Cloud — TLS MQTT broker (no local Mosquitto needed)
+      MQTT_BROKER_HOST: ${MQTT_BROKER_HOST:-8d937abc7785435391e5f48c62f4e99c.s1.eu.hivemq.cloud}
+      MQTT_BROKER_PORT: ${MQTT_BROKER_PORT:-8883}
+      MQTT_TLS: ${MQTT_TLS:-true}
+      MQTT_USERNAME: ${MQTT_USERNAME:-ECOLOOP}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:?set MQTT_PASSWORD in infra/.env}
       AI_SERVICE_URL: http://ai-service:8051
-      STATION_API_KEY: ${STATION_API_KEY:?set STATION_API_KEY in your environment}
+      STATION_API_KEY: ${STATION_API_KEY:?set STATION_API_KEY in infra/.env}
       SEED_ON_STARTUP: "true"
       SEED_DEMO_USER: "false"
       ENVIRONMENT: ${ENVIRONMENT:-development}
-      # REQUIRED in production; provide a strong random value via env/.env:
-      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in your environment}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in infra/.env}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     deploy:
       resources:
         limits:
@@ -110,17 +91,19 @@ services:
     profiles: ["simulator"]
     restart: unless-stopped
     environment:
-      MQTT_BROKER_HOST: mosquitto
-      MQTT_BROKER_PORT: "1883"
-      MQTT_USERNAME: backend
-      MQTT_PASSWORD: ${MQTT_PASSWORD:?set MQTT_PASSWORD in your environment}
+      # HiveMQ Cloud — same broker as backend
+      MQTT_BROKER_HOST: ${MQTT_BROKER_HOST:-8d937abc7785435391e5f48c62f4e99c.s1.eu.hivemq.cloud}
+      MQTT_BROKER_PORT: ${MQTT_BROKER_PORT:-8883}
+      MQTT_TLS: ${MQTT_TLS:-true}
+      MQTT_USERNAME: ${MQTT_USERNAME:-ECOLOOP}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:?set MQTT_PASSWORD in infra/.env}
       BACKEND_URL: http://backend:8000
-      STATION_API_KEY: ${STATION_API_KEY:?set STATION_API_KEY in your environment}
+      STATION_API_KEY: ${STATION_API_KEY:?set STATION_API_KEY in infra/.env}
       STATION_ID: st-001
       STATION_CODE: ST-001
     depends_on:
-      mosquitto:
-        condition: service_healthy
+      backend:
+        condition: service_started
 
 volumes:
   pgdata:

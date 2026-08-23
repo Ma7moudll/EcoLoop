@@ -609,6 +609,153 @@ def main() -> None:
                bool(ev_i) and ev_i[0]["points_awarded"] == 5)
 
         # =========================================================================
+        # Rewards marketplace leg — atomic redemption over REAL HTTP+Postgres.
+        # =========================================================================
+        def set_points(points: int) -> None:
+            conn = _connect_pg()
+            with conn.cursor() as cur:
+                cur.execute("UPDATE users SET points=%s WHERE email=%s",
+                            (points, DEMO_EMAIL))
+            conn.commit()
+            conn.close()
+
+        catalog = client.get("/api/v1/rewards", headers=headers)
+        record("Rewards catalog lists the seeded products",
+               catalog.status_code == 200
+               and {r["id"] for r in catalog.json()["rewards"]} >= {
+                   "rw-vodafone-10", "rw-instapay-25",
+                   "rw-mix-coffee-20", "rw-copy-center-30"},
+               f"http={catalog.status_code}")
+
+        anon = client.get("/api/v1/rewards")
+        record("Rewards require authentication", anon.status_code == 401,
+               str(anon.status_code))
+
+        set_points(200)
+        key = secrets.token_hex(16)
+        r1 = client.post("/api/v1/rewards/rw-mix-coffee-20/redeem",
+                         headers=headers, json={"idempotency_key": key})
+        ok_r1 = (r1.status_code == 200 and r1.json()["balance"] == 140
+                 and r1.json()["redemption"]["redemption_code"].startswith("ECO-"))
+        record("Code redemption deducts once and issues an ECO code", ok_r1,
+               r1.text[:120])
+
+        retry = client.post("/api/v1/rewards/rw-mix-coffee-20/redeem",
+                            headers=headers, json={"idempotency_key": key})
+        record("Idempotent replay returns the SAME redemption, no double spend",
+               retry.status_code == 200
+               and retry.json()["redemption"]["id"] == r1.json()["redemption"]["id"]
+               and retry.json()["balance"] == 140, retry.text[:120])
+
+        rd_id = r1.json()["redemption"]["id"]
+        cancel = client.post(f"/api/v1/rewards/redemptions/{rd_id}/cancel",
+                             headers=headers)
+        record("Cancelling an unused code refunds the exact points",
+               cancel.status_code == 200
+               and cancel.json()["redemption"]["status"] == "cancelled"
+               and cancel.json()["balance"] == 200, cancel.text[:120])
+
+        set_points(30)
+        broke = client.post("/api/v1/rewards/rw-copy-center-30/redeem",
+                            headers=headers,
+                            json={"idempotency_key": secrets.token_hex(16)})
+        conn = _connect_pg()
+        with conn.cursor() as cur:
+            cur.execute("SELECT points FROM users WHERE email=%s", (DEMO_EMAIL,))
+            untouched = cur.fetchone()[0]
+        conn.close()
+        record("Insufficient balance -> 409 and points untouched",
+               broke.status_code == 409 and untouched == 30,
+               f"http={broke.status_code} points={untouched}")
+
+        nodest = client.post("/api/v1/rewards/rw-vodafone-10/redeem",
+                             headers=headers,
+                             json={"idempotency_key": secrets.token_hex(16)})
+        record("Cash payout without destination is refused",
+               nodest.status_code == 422, nodest.text[:120])
+
+        student_admin = client.get("/api/v1/admin/rewards/redemptions",
+                                   headers=headers)
+        record("Student cannot open the admin fulfillment queue",
+               student_admin.status_code == 403, str(student_admin.status_code))
+
+        # --- admin flow ------------------------------------------------------
+        hash_out = subprocess.run(
+            [PYTHON, "-c",
+             "import sys; sys.path.insert(0, 'backend');"
+             "from app.security.password import hash_password;"
+             "print(hash_password('admin-pass-123'))"],
+            capture_output=True, text=True, cwd=ROOT, check=True,
+        )
+        admin_hash = hash_out.stdout.strip()
+        conn = _connect_pg()
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO users (id, email, student_code, name,"
+                " password_hash, faculty_id, points, role)"
+                " VALUES ('u-e2e-admin', 'admin@recycle.vision', 'S-E2EADMIN',"
+                " 'E2E Admin', %s, 'ENGINEERING', 0, 'admin')"
+                " ON CONFLICT (email) DO NOTHING",
+                (admin_hash,),
+            )
+        conn.commit()
+        conn.close()
+
+        admin_login = client.post("/api/v1/auth/login", json={
+            "email": "admin@recycle.vision", "password": "admin-pass-123"})
+        assert admin_login.status_code == 200, admin_login.text
+        admin_headers = {"Authorization":
+                         f"Bearer {admin_login.json()['token']}"}
+
+        set_points(100)
+        cash_key = secrets.token_hex(16)
+        cash = client.post("/api/v1/rewards/rw-vodafone-10/redeem",
+                           headers=headers,
+                           json={"idempotency_key": cash_key,
+                                 "destination": "01012345678"})
+        cash_id = cash.json()["redemption"]["id"]
+        queue = client.get("/api/v1/admin/rewards/redemptions?status=pending",
+                           headers=admin_headers)
+        in_queue = any(i["id"] == cash_id and i["destination_masked"]
+                       and "*" in i["destination_masked"]
+                       for i in queue.json()["items"])
+        record("Cash redemption lands PENDING in the admin queue (masked dest)",
+               cash.status_code == 200
+               and cash.json()["redemption"]["status"] == "pending" and in_queue,
+               cash.text[:120])
+
+        fulfilled = client.post(
+            f"/api/v1/admin/rewards/redemptions/{cash_id}/fulfill",
+            headers=admin_headers, json={"admin_note": "sent"})
+        record("Admin fulfills the payout", fulfilled.status_code == 200
+               and fulfilled.json()["status"] == "fulfilled")
+
+        set_points(250)
+        cash2 = client.post("/api/v1/rewards/rw-instapay-25/redeem",
+                            headers=headers,
+                            json={"idempotency_key": secrets.token_hex(16),
+                                  "destination": "mac@instapay"})
+        cash2_id = cash2.json()["redemption"]["id"]
+        rejected = client.post(
+            f"/api/v1/admin/rewards/redemptions/{cash2_id}/reject",
+            headers=admin_headers, json={"admin_note": "unreachable"})
+        conn = _connect_pg()
+        with conn.cursor() as cur:
+            cur.execute("SELECT points FROM users WHERE email=%s",
+                        (DEMO_EMAIL,))
+            refunded = cur.fetchone()[0]
+        conn.close()
+        record("Rejection refunds the points exactly once (250 restored)",
+               rejected.status_code == 200 and refunded == 250,
+               f"http={rejected.status_code} points={refunded}")
+        again = client.post(
+            f"/api/v1/admin/rewards/redemptions/{cash2_id}/reject",
+            headers=admin_headers, json={})
+        record("Double rejection is refused (no double refund)",
+               again.status_code == 409, str(again.status_code))
+        set_points(60)  # restore for the final DB integrity sweep
+
+        # =========================================================================
         # Final DB integrity sweep.
         # =========================================================================
         conn = _connect_pg()

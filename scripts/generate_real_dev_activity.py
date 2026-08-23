@@ -153,8 +153,14 @@ def main() -> None:
         "password": password,
         "facultyId": "engineering",
     })
-    if r.status_code != 200:
+    if r.status_code != 201:
         print(f"FATAL: register failed: {r.status_code} {r.text}")
+        sys.exit(1)
+    # Registration creates the account only (never a session) — login now.
+    r = client.post("/api/v1/auth/login",
+                    json={"email": email, "password": password})
+    if r.status_code != 200:
+        print(f"FATAL: login failed: {r.status_code} {r.text}")
         sys.exit(1)
     token = r.json()["token"]
     headers = {"Authorization": f"Bearer {token}"}
