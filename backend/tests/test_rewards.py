@@ -434,3 +434,177 @@ def test_stock_is_atomic_and_blocks_sold_out(client, student, admin_auth):
         )
         outcomes.append(r.status_code)
     assert sorted(outcomes) == [200, 422]  # one wins, one sees sold out
+
+
+# -- double-refund race regression (atomic state transitions) --------------------
+#
+# The original TOCTOU: two transactions each loaded a redemption while it was
+# still in its pre-transition state, then BOTH refunded — points created from
+# nothing. These tests reproduce that interleaving deterministically: the
+# "loser" session loads its snapshot BEFORE the winner commits, so its in-
+# memory copy still shows the old status when it attempts the same transition.
+# The atomic guarded UPDATE must match zero rows for the loser -> no refund.
+
+
+def _redeem_code(client, student, key: str) -> str:
+    """Redeem the coffee CODE reward at 100 points; returns redemption id."""
+    _set_points("u-reward", 100)
+    r = client.post(
+        "/api/v1/rewards/rw-mix-coffee-20/redeem",
+        headers=student,
+        json={"idempotency_key": key},
+    )
+    assert r.status_code == 200, r.text
+    return r.json()["redemption"]["id"]
+
+
+def _redeem_cash(client, student, key: str) -> str:
+    """Redeem the InstaPay CASH reward at 250 points; returns redemption id."""
+    _set_points("u-reward", 250)
+    r = client.post(
+        "/api/v1/rewards/rw-instapay-25/redeem",
+        headers=student,
+        json={"idempotency_key": key, "destination": "01012345678"},
+    )
+    assert r.status_code == 200, r.text
+    return r.json()["redemption"]["id"]
+
+
+def test_concurrent_cancels_refund_exactly_once(client, student):
+    """Case A — cancel VS cancel on the same available code: one winner
+    refunds once; the stale-snapshot loser is a no-op."""
+    from app.models import RewardRedemption
+    from app.services.reward_service import user_cancel_available
+
+    rd_id = _redeem_code(client, student, "race-cancel-000000001")
+    after_redeem = _balance()  # 40
+
+    with SessionLocal() as loser:
+        stale = loser.get(RewardRedemption, rd_id)
+        assert stale.status == "available"  # TOCTOU precondition
+
+        with SessionLocal() as winner:
+            user_cancel_available(winner, winner.get(RewardRedemption, rd_id))
+
+        with pytest.raises(RewardError):
+            user_cancel_available(loser, stale)
+
+    assert _balance() == after_redeem + 60, "exactly ONE refund of 60, never two"
+    with SessionLocal() as s:
+        assert s.get(RewardRedemption, rd_id).status == "cancelled"
+
+
+def test_stale_admin_reject_cannot_double_refund(client, student):
+    """Case B — reject VS reject on the same pending cash payout: the second
+    rejection must be refused without moving points again."""
+    from app.models import RewardRedemption
+    from app.services.reward_service import admin_reject
+
+    rd_id = _redeem_cash(client, student, "race-reject-000000001")
+    after_redeem = _balance()  # 0
+
+    with SessionLocal() as loser:
+        stale = loser.get(RewardRedemption, rd_id)
+        assert stale.status == "pending"
+
+        with SessionLocal() as winner:
+            admin_reject(winner, winner.get(RewardRedemption, rd_id), "winner")
+
+        with pytest.raises(RewardError):
+            admin_reject(loser, stale, "loser must not refund again")
+
+    assert _balance() == after_redeem + 250, "exactly ONE refund of 250"
+    with SessionLocal() as s:
+        row = s.get(RewardRedemption, rd_id)
+        assert row.status == "rejected"
+        assert row.admin_note == "winner", "loser note must not overwrite"
+
+
+def test_cancel_vs_mark_used_single_terminal_transition(client, student):
+    """Case C — cancel VS mark-used share the 'available' source state:
+    exactly one of them may win; the other is refused."""
+    from app.models import RewardRedemption
+
+    # cancel wins, mark-used loses
+    rd_id = _redeem_code(client, student, "race-cxm-0000000001")
+    balance_after_win = None
+    win = client.post(f"/api/v1/rewards/redemptions/{rd_id}/cancel", headers=student)
+    assert win.status_code == 200
+    balance_after_win = _balance()
+    lost = client.post(
+        f"/api/v1/admin/rewards/redemptions/{rd_id}/mark-used",
+        headers=_admin_headers(client),
+    )
+    assert lost.status_code == 409
+    assert _balance() == balance_after_win, "mark-used must not touch points"
+    with SessionLocal() as s:
+        assert s.get(RewardRedemption, rd_id).status == "cancelled"
+
+    # mark-used wins, cancel loses
+    rd2 = _redeem_code(client, student, "race-cxm-0000000002")
+    used = client.post(
+        f"/api/v1/admin/rewards/redemptions/{rd2}/mark-used",
+        headers=_admin_headers(client),
+    )
+    assert used.status_code == 200
+    balance_before = _balance()
+    lost_cancel = client.post(f"/api/v1/rewards/redemptions/{rd2}/cancel", headers=student)
+    assert lost_cancel.status_code == 422
+    assert _balance() == balance_before, "losing cancel must not refund"
+    with SessionLocal() as s:
+        assert s.get(RewardRedemption, rd2).status == "used"
+
+
+def _admin_headers(client) -> dict:
+    with SessionLocal() as db:
+        from app.models import User
+
+        if db.get(User, "u-admin-race") is None:
+            db.add(
+                User(
+                    id="u-admin-race",
+                    email="race-admin@recycle.vision",
+                    student_code="S-RACEADMIN",
+                    name="Race Admin",
+                    password_hash=hash_password("admin-pass-123"),
+                    faculty_id="ENGINEERING",
+                    points=0,
+                    role="admin",
+                )
+            )
+            db.commit()
+    r = client.post(
+        "/api/v1/auth/login",
+        json={"email": "race-admin@recycle.vision", "password": "admin-pass-123"},
+    )
+    assert r.status_code == 200, r.text
+    return {"Authorization": f"Bearer {r.json()['token']}"}
+
+
+def test_parallel_cancels_through_http_refund_exactly_once(client, student):
+    """True concurrency: N threads fire cancel simultaneously through real
+    HTTP; exactly one may succeed and only one refund may land."""
+    import threading
+
+    rd_id = _redeem_code(client, student, "race-parallel-00000001")
+    after_redeem = _balance()
+
+    barrier = threading.Barrier(8)
+    outcomes: list[int] = []
+    lock = threading.Lock()
+
+    def fire():
+        barrier.wait()
+        r = client.post(f"/api/v1/rewards/redemptions/{rd_id}/cancel", headers=student)
+        with lock:
+            outcomes.append(r.status_code)
+
+    threads = [threading.Thread(target=fire) for _ in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert outcomes.count(200) == 1, f"exactly one winner: {outcomes}"
+    assert all(code in (409, 422) for code in outcomes if code != 200)
+    assert _balance() == after_redeem + 60, "exactly one refund under contention"

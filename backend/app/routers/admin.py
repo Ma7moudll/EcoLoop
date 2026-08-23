@@ -9,7 +9,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, field_validator
-from sqlalchemy import func as sa_func, select
+from sqlalchemy import func as sa_func, select, update
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -791,9 +791,22 @@ def reject_redemption(
 
 @router.post("/rewards/redemptions/{redemption_id}/mark-used")
 def mark_used(redemption_id: str, db: Session = Depends(get_db)) -> dict:
-    """Merchant-side confirmation that an available code was consumed."""
+    """Merchant-side confirmation that an available code was consumed.
+
+    Atomic transition: the conditional UPDATE wins only if the row is STILL
+    available at write time — a student cancel (or another mark-used) that
+    committed first makes this a no-op 409, never a second terminal move."""
     rd = _load_redemption(db, redemption_id)
-    if rd.status != "available":
+    won = db.execute(
+        update(RewardRedemption)
+        .where(
+            RewardRedemption.id == rd.id,
+            RewardRedemption.status == "available",
+        )
+        .values(status="used")
+        .execution_options(synchronize_session=False)
+    )
+    if won.rowcount == 0:
         raise HTTPException(status_code=409, detail="Only available codes can be marked used.")
     rd.status = "used"
     db.commit()

@@ -147,8 +147,23 @@ def redeem(
 
 def admin_reject(db: Session, redemption: RewardRedemption, note: str) -> None:
     """Rejecting refunds the points — students never lose points to a
-    rejection they did not cause. Auditable via admin_note."""
-    if redemption.status not in {"pending", "approved"}:
+    rejection they did not cause. Auditable via admin_note.
+
+    The refund is gated by an ATOMIC state transition: the conditional
+    UPDATE only matches a row still in pending/approved, so of two
+    concurrent rejections (or a rejection racing a student cancel) exactly
+    one transaction wins the row and refunds; the loser updates zero rows,
+    raises without touching points, and the whole unit rolls back."""
+    won = db.execute(
+        update(RewardRedemption)
+        .where(
+            RewardRedemption.id == redemption.id,
+            RewardRedemption.status.in_(("pending", "approved")),
+        )
+        .values(status="rejected")
+        .execution_options(synchronize_session=False)
+    )
+    if won.rowcount == 0:
         raise RewardError("Only pending or approved redemptions can be rejected.", 409)
     refund = db.execute(
         update(User)
@@ -156,6 +171,8 @@ def admin_reject(db: Session, redemption: RewardRedemption, note: str) -> None:
         .values(points=User.points + redemption.points_spent)
     )
     if refund.rowcount == 0:
+        # Nothing has been committed yet — the status transition above rolls
+        # back with this raise, so the redemption stays in its prior state.
         raise RewardError("The student account no longer exists.", 404)
     redemption.status = "rejected"
     redemption.admin_note = note[:512]
@@ -164,13 +181,28 @@ def admin_reject(db: Session, redemption: RewardRedemption, note: str) -> None:
 
 
 def user_cancel_available(db: Session, redemption: RewardRedemption) -> None:
-    """Cancel an unused AVAILABLE code and refund the points."""
-    if redemption.status != "available":
+    """Cancel an unused AVAILABLE code and refund the points.
+
+    Atomic transition: the refund happens ONLY in the transaction whose
+    conditional UPDATE moved available -> cancelled (rowcount == 1). A
+    concurrent transaction that read the same 'available' state loses the
+    race — its UPDATE matches zero rows, it raises before refunding, and
+    no points can be created from nothing."""
+    won = db.execute(
+        update(RewardRedemption)
+        .where(
+            RewardRedemption.id == redemption.id,
+            RewardRedemption.status == "available",
+        )
+        .values(status="cancelled")
+        .execution_options(synchronize_session=False)
+    )
+    if won.rowcount == 0:
         raise RewardError("Only available codes can be cancelled.")
+    redemption.status = "cancelled"
     db.execute(
         update(User)
         .where(User.id == redemption.user_id)
         .values(points=User.points + redemption.points_spent)
     )
-    redemption.status = "cancelled"
     db.commit()
