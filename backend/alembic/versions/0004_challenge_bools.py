@@ -24,15 +24,27 @@ def upgrade() -> None:
     if not _IS_PG:
         return
     with op.batch_alter_table("challenges") as batch:
+        # Drop the integer defaults first: PostgreSQL cannot auto-cast a
+        # '0' column default to boolean during ALTER TYPE (DatatypeMismatch).
+        batch.alter_column(
+            "completed", server_default=None,
+            existing_type=sa.Integer(), existing_nullable=False,
+        )
+        batch.alter_column(
+            "active", server_default=None,
+            existing_type=sa.Integer(), existing_nullable=False,
+        )
         batch.alter_column(
             "completed",
             type_=sa.Boolean(),
+            server_default=sa.text("false"),
             postgresql_using="completed::int::boolean",
             existing_nullable=False,
         )
         batch.alter_column(
             "active",
             type_=sa.Boolean(),
+            server_default=sa.text("true"),
             postgresql_using="active::int::boolean",
             existing_nullable=False,
         )
