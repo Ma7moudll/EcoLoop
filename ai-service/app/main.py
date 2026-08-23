@@ -6,6 +6,7 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 from PIL import UnidentifiedImageError
 
+from .config import ai_settings
 from .inference import get_classifier
 from .inference.real import ModelNotReadyError
 from .tools.quality_gate import (
@@ -41,9 +42,37 @@ def _reject(state: GateState, detail: str) -> JSONResponse:
     )
 
 
+_CHUNK = 1024 * 1024  # 1 MiB streaming window
+
+
+def _read_limited(image: UploadFile) -> bytes:
+    """Stream the upload with a hard byte cap.
+
+    At most `limit + _CHUNK` bytes ever touch memory: the moment the
+    accumulated size exceeds the configured maximum, the request is rejected
+    (413) — BEFORE decode, quality gate or inference see a single byte of it.
+    """
+    limit = ai_settings.max_upload_bytes
+    chunks: list[bytes] = []
+    received = 0
+    while True:
+        chunk = image.file.read(_CHUNK)
+        if not chunk:
+            break
+        received += len(chunk)
+        if received > limit:
+            image.file.close()
+            raise HTTPException(
+                status_code=413,
+                detail="The uploaded image is too large. Please try a smaller photo.",
+            )
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
 @app.post("/predict")
 def predict(image: UploadFile = File(...)) -> dict:
-    data = image.file.read()
+    data = _read_limited(image)
     if not data:
         return _reject(GateState.CORRUPT_IMAGE, "Empty image")
 

@@ -31,6 +31,16 @@ class AISettings(BaseSettings):
 
     classes: tuple[str, ...] = ("plastic", "metal", "paper", "other")
 
+    # Defensive application-level upload cap for /predict, in bytes.
+    # Station-camera frames are ~0.1-0.5 MB and even multi-megapixel photos
+    # land well under this; the model downsamples anyway. Enforced BEFORE
+    # decode/gate/inference so an oversized body can never be fully buffered.
+    max_upload_bytes: int = Field(
+        default=10 * 1024 * 1024,
+        ge=1,
+        validation_alias=AliasChoices("AI_MAX_UPLOAD_BYTES", "max_upload_bytes"),
+    )
+
     host: str = "0.0.0.0"
     port: int = 8051
 
