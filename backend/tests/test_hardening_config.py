@@ -19,6 +19,10 @@ def _prod_settings(**overrides) -> Settings:
         debug_image_hash=False,
         seed_demo_user=False,
         email_provider="console",
+        # Production-grade session/link settings required by validate_production:
+        # short-lived access tokens and a real public base URL for emails.
+        jwt_access_token_minutes=240,
+        public_base_url="https://ecoloop.example.org",
     )
     base.update(overrides)
     return Settings(**base)

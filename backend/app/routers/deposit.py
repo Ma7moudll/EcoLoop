@@ -78,7 +78,7 @@ def capture(
     if len(image_bytes) > settings.max_upload_bytes:
         return JSONResponse(status_code=413, content={"error": "payload_too_large"})
     if not image_bytes:
-        raise HTTPException(status_code=422, detail="Empty capture")
+        raise HTTPException(status_code=422, detail="The captured image is empty. Please try again.")
     try:
         return DepositService(_publisher).handle_capture(
             db, operation_id, station_code, image_bytes,
@@ -104,7 +104,7 @@ def get_deposit(
 
     session = DepositRepository().get_by_operation_id(db, operation_id)
     if session is None or session.user_id != user.id:
-        raise HTTPException(status_code=404, detail="Deposit not found")
+        raise HTTPException(status_code=404, detail="This deposit could not be found.")
     return _wire_session(session)
 
 

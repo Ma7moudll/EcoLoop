@@ -1,11 +1,19 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+import re
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import FileResponse
+from pydantic import BaseModel, Field
+from sqlalchemy import func as sa_func
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import User
+from ..models import Faculty, User
 from ..repositories import WasteRepository
+from ..schemas import UserOut
 from ..security import get_current_user
 from ..services import ChallengeService, ImpactService, LeaderboardService
 
@@ -28,6 +36,141 @@ def me(
     from .auth import payload_fields
 
     return {"user": payload_fields(db, user)}
+
+
+class UpdateProfileRequest(BaseModel):
+    name: str | None = Field(None, min_length=1, max_length=80)
+    faculty_id: str | None = Field(None, max_length=64)
+
+
+# Allowed avatar image types (magic-byte verified, not just content-type).
+_AVATAR_MAGIC = {
+    "image/jpeg": b"\xff\xd8\xff",
+    "image/png": b"\x89PNG\r\n\x1a\n",
+    "image/webp": b"RIFF",
+}
+
+
+def _avatars_dir() -> Path:
+    from ..config import settings
+
+    path = Path(settings.avatars_dir)
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _avatar_path(user_id: str) -> Path:
+    return _avatars_dir() / f"{user_id}.jpg"
+
+
+@router.put("/users/me/avatar", response_model=UserOut)
+async def upload_avatar(
+    request: Request,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> UserOut:
+    """Upload a profile photo (multipart form field `file`).
+
+    Accepts JPEG/PNG/WebP up to `avatar_max_bytes`; the bytes are
+    magic-byte-verified and stored on the server filesystem. Every upload
+    bumps `avatar_version` so clients can cache-bust."""
+    from .auth import payload_fields
+
+    content_type = (request.headers.get("content-type") or "").lower()
+    if "multipart/form-data" not in content_type:
+        raise HTTPException(
+            status_code=422,
+            detail="Please attach the photo as a multipart file upload.",
+        )
+
+    form = await request.form()
+    upload = form.get("file")
+    if upload is None or isinstance(upload, str):
+        raise HTTPException(status_code=422, detail="Please choose a photo to upload.")
+
+    data = await upload.read()
+    from ..config import settings
+
+    if not data:
+        raise HTTPException(status_code=422, detail="The selected photo is empty. Please try another one.")
+    if len(data) > settings.avatar_max_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail="That photo is too large. Please choose one under 2 MB.",
+        )
+    if not any(data.startswith(magic) for magic in _AVATAR_MAGIC.values()):
+        raise HTTPException(
+            status_code=422,
+            detail="That file is not a supported image. Please use JPG, PNG or WebP.",
+        )
+
+    _avatar_path(user.id).write_bytes(data)
+    user.avatar_version = int(user.avatar_version or 0) + 1
+    db.commit()
+    db.refresh(user)
+    return UserOut(user=payload_fields(db, user))
+
+
+@router.delete("/users/me/avatar", response_model=UserOut)
+def remove_avatar(
+    user: User = Depends(get_current_user), db: Session = Depends(get_db)
+) -> UserOut:
+    """Remove the profile photo (bumps the version so caches invalidate)."""
+    from .auth import payload_fields
+
+    path = _avatar_path(user.id)
+    if path.exists():
+        path.unlink()
+    user.avatar_version = 0
+    db.commit()
+    db.refresh(user)
+    return UserOut(user=payload_fields(db, user))
+
+
+@router.get("/users/avatar/{user_id}")
+def get_avatar(user_id: str) -> FileResponse:
+    """Serves a student's profile photo. Photos are non-sensitive by design;
+    the version query parameter allows clients to cache aggressively."""
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", user_id):
+        raise HTTPException(status_code=404, detail="This photo could not be found.")
+    path = _avatar_path(user_id)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="This photo could not be found.")
+    return FileResponse(path, media_type="image/jpeg")
+
+
+@router.patch("/users/me/profile", response_model=UserOut)
+def update_profile(
+    payload: UpdateProfileRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> UserOut:
+    """Edit display name and/or faculty. Email, student code and role are
+    identity fields and are deliberately NOT editable here."""
+    from .auth import payload_fields
+
+    if payload.name is None and payload.faculty_id is None:
+        raise HTTPException(status_code=422, detail="There are no changes to save.")
+
+    if payload.name is not None and not payload.name.strip():
+        raise HTTPException(status_code=422, detail="Your name cannot be empty.")
+
+    if payload.faculty_id is not None:
+        exists = db.execute(
+            select(sa_func.count()).select_from(Faculty).where(
+                Faculty.id == payload.faculty_id
+            )
+        ).scalar_one()
+        if not exists:
+            raise HTTPException(status_code=422, detail="Please select a valid faculty.")
+
+    if payload.name is not None:
+        user.name = payload.name.strip()
+    if payload.faculty_id is not None:
+        user.faculty_id = payload.faculty_id
+    db.commit()
+    db.refresh(user)
+    return UserOut(user=payload_fields(db, user))
 
 
 @router.get("/waste/history")
@@ -70,7 +213,7 @@ def history_event(
     repo = WasteRepository()
     event = repo.get(db, event_id)
     if event is None or event.user_id != user.id:
-        raise HTTPException(status_code=404, detail="Event not found")
+        raise HTTPException(status_code=404, detail="This event could not be found.")
     return {
         "item": {
             "id": event.id,

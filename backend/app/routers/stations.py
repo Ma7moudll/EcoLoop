@@ -51,7 +51,7 @@ def get_station(
 ) -> dict:
     station = db.get(Station, station_id)
     if station is None:
-        raise HTTPException(status_code=404, detail="Station not found")
+        raise HTTPException(status_code=404, detail="This station could not be found.")
     return _wire(station, registry.get(station.station_code))
 
 
@@ -63,7 +63,7 @@ def station_status(
 ) -> dict:
     station = db.get(Station, station_id)
     if station is None:
-        raise HTTPException(status_code=404, detail="Station not found")
+        raise HTTPException(status_code=404, detail="This station could not be found.")
     snapshot = registry.get(station.station_code)
     if snapshot is None:
         return {

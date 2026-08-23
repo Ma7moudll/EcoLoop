@@ -5,7 +5,8 @@ import logging
 import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -18,10 +19,12 @@ from .routers import (
     auth_router,
     debug_router,
     deposit_router,
+    rewards_router,
     stations_router,
     user_data_router,
     ws_router,
 )
+from .routers.admin_ui import router as admin_ui_router
 from .services import LeaderboardService, event_bus, registry, seed
 from .state import configure_gateway
 
@@ -73,7 +76,7 @@ async def lifespan(app: FastAPI):
     configure_gateway(gateway)
     handler.install_handlers(gateway)
     gateway.start()
-    event_bus.attach_loop(asyncio.get_event_loop())
+    event_bus.attach_loop(asyncio.get_running_loop())
 
     logger.info("[MQTT] starting gateway %s:%s tls=%s", gateway.broker_host, gateway.broker_port, settings.mqtt_tls)
 
@@ -105,13 +108,71 @@ def create_app() -> FastAPI:
         )
         return JSONResponse(status_code=500, content={"error": "internal_server_error"})
 
+    @app.exception_handler(HTTPException)
+    async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+        """Uniform error envelope: every client-facing failure is
+        `{"error": "<professional sentence>"}` with the proper status code."""
+        detail = exc.detail
+        message = detail if isinstance(detail, str) else "The request could not be completed."
+        return JSONResponse(status_code=exc.status_code, content={"error": message})
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+        """Translate pydantic validation noise into ONE clear sentence per
+        request (field names in parentheses), safe to show to a user."""
+        field_labels = {
+            "name": "name",
+            "email": "email address",
+            "password": "password",
+            "facultyId": "faculty",
+            "faculty_id": "faculty",
+            "studentCode": "student code",
+            "current_password": "current password",
+            "new_password": "new password",
+        }
+
+        def _human(item: dict) -> str:
+            loc = [str(x) for x in item.get("loc", []) if x not in ("body", "query", "path")]
+            field = field_labels.get(loc[-1] if loc else "", loc[-1] if loc else "value")
+            err_type = item.get("type", "")
+            ctx = item.get("ctx") or {}
+            if err_type == "missing":
+                return f"Please choose your {field}." if field == "faculty" \
+                    else f"Please enter your {field}." if field != "value" \
+                    else "A required field is missing."
+            if err_type == "string_too_short":
+                minimum = ctx.get("min_length")
+                if minimum is None or int(minimum) <= 1:
+                    return f"Please enter your {field}." if field != "value" else "A required field is missing."
+                return f"Your {field} must be at least {minimum} characters long."
+            if err_type == "string_too_long":
+                maximum = ctx.get("max_length")
+                return f"Your {field} is too long (maximum {maximum} characters)."
+            if err_type == "value_error":
+                return f"The {field} you entered is not valid."
+            if err_type == "json_invalid":
+                return "The request could not be read. Please try again."
+            return f"Please check the {field} you entered."
+
+        seen: list[str] = []
+        for item in exc.errors():
+            msg = _human(item)
+            if msg not in seen:
+                seen.append(msg)
+        message = " ".join(seen) or "Some of the details you entered are invalid. Please review them."
+        return JSONResponse(status_code=422, content={"error": message})
+
     prefix = settings.api_v1_prefix
     app.include_router(auth_router, prefix=prefix)
     app.include_router(ai_router, prefix=prefix)
     app.include_router(deposit_router, prefix=prefix)
     app.include_router(stations_router, prefix=prefix)
     app.include_router(user_data_router, prefix=prefix)
+    app.include_router(rewards_router, prefix=prefix)
     app.include_router(admin_router, prefix=prefix)
+    # Inert admin console shell (no data, no secrets); every data call goes
+    # through the require_admin-gated /admin/* JSON endpoints above.
+    app.include_router(admin_ui_router, prefix=prefix)
     app.include_router(ws_router)
 
     # Debug-only byte-identity fingerprint route. Mounted ONLY when explicitly

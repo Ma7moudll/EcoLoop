@@ -155,7 +155,12 @@ class DepositService:
 
         policy = db.execute(
             select(RoutingPolicy).where(RoutingPolicy.waste_class == prediction.predicted_class)
-        ).scalar_one()
+        ).scalar_one_or_none()
+        if policy is None:
+            raise ValueError(
+                f"No routing policy for class '{prediction.predicted_class}'. "
+                "Contact an administrator."
+            )
 
         now = _utcnow()
         session = DepositSession(
@@ -274,7 +279,12 @@ class DepositService:
 
         policy = db.execute(
             select(RoutingPolicy).where(RoutingPolicy.waste_class == pred["predicted_class"])
-        ).scalar_one()
+        ).scalar_one_or_none()
+        if policy is None:
+            raise ValueError(
+                f"No routing policy for class '{pred['predicted_class']}'. "
+                "Contact an administrator."
+            )
         session.ai_prediction_id = pred["prediction_id"]
         session.routing_policy_id = policy.id
         session.expected_class = pred["predicted_class"]

@@ -90,7 +90,7 @@ def test_low_confidence_prediction_cannot_route(client, auth, demo_session, monk
         json={"ai_prediction_id": pred["prediction_id"], "station_id": "st-001"},
     )
     assert r.status_code == 422
-    assert "confidence" in r.json()["detail"].lower()
+    assert "confidence" in r.json()["error"].lower()
 
 
 def test_expired_prediction_rejected(client, auth, plastic_prediction):
@@ -111,14 +111,11 @@ def test_expired_prediction_rejected(client, auth, plastic_prediction):
 
 def test_session_for_other_users_prediction_rejected(client, auth, plastic_prediction):
     # Register a second user and try to use the first user's prediction.
-    r2 = client.post(
-        "/api/v1/auth/register",
-        json={"name": "Second", "email": "second@uni.edu", "password": "secret99"},
-    )
-    token2 = r2.json()["token"]
+    from .conftest import register_and_login
+    headers2 = register_and_login(client, "second@uni.edu")
     r = client.post(
         "/api/v1/deposit/session",
-        headers={"Authorization": f"Bearer {token2}"},
+        headers=headers2,
         json={"ai_prediction_id": plastic_prediction["prediction_id"], "station_id": "st-001"},
     )
     assert r.status_code == 422
@@ -168,7 +165,7 @@ def test_duplicate_event_rejected_409(client, auth, plastic_prediction):
     complete(client, session["operation_id"], position=1, weight=18.4, stable=True, beam=True, mech=True, carriage=1)
     code, result = complete(client, session["operation_id"], position=1, weight=18.4, stable=True, beam=True, mech=True, carriage=1)
     assert code == 409
-    assert "already" in result["detail"]
+    assert "already" in result["error"]
 
 
 def test_wrong_position_rejected(client, auth, plastic_prediction):

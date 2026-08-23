@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from collections import defaultdict
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -23,9 +22,11 @@ class ChallengeService:
                 "description": c.description,
                 "theme_emoji": c.theme_emoji,
                 "target_kg": c.target_kg,
-                "current_kg": round(progress[c.waste_class], 3),
+                # Classes with no confirmed deposits simply have zero progress.
+                "current_kg": round(progress.get(c.waste_class, 0.0), 3),
                 "reward_points": c.reward_points,
-                "completed": c.id in completed_ids or progress[c.waste_class] >= c.target_kg,
+                "completed": c.id in completed_ids
+                or progress.get(c.waste_class, 0.0) >= c.target_kg,
                 "active": bool(c.active),
             }
             for c in rows
@@ -59,7 +60,7 @@ class ChallengeService:
         for challenge in challenges:
             if challenge.id in already:
                 continue
-            if progress[waste_class] < challenge.target_kg:
+            if progress.get(waste_class, 0.0) < challenge.target_kg:
                 continue
             if challenge.reward_points <= 0:
                 # Nothing to award; still persist completion for the UI.
@@ -99,13 +100,19 @@ class ChallengeService:
         return set(rows)
 
     def _progress(self, db: Session, user: User) -> dict[str, float]:
-        kg: dict[str, float] = defaultdict(float)
-        events = db.execute(
-            select(WasteEvent).where(
+        """Aggregates confirmed deposit weight per waste class in a single SQL
+        GROUP BY query — O(1) regardless of how many deposits the user has."""
+        from sqlalchemy import func
+
+        rows = db.execute(
+            select(
+                WasteEvent.predicted_class,
+                func.sum(WasteEvent.weight_grams / 1000.0).label("total_kg"),
+            )
+            .where(
                 WasteEvent.user_id == user.id,
                 WasteEvent.status == "confirmed",
             )
-        ).scalars()
-        for e in events:
-            kg[e.predicted_class] += e.weight_grams / 1000.0
-        return kg
+            .group_by(WasteEvent.predicted_class)
+        ).all()
+        return {row.predicted_class: float(row.total_kg or 0.0) for row in rows}

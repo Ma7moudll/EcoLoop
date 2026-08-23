@@ -53,11 +53,13 @@ def seed(db: Session, seed_demo_user: bool = False) -> None:
     # reset with the config seed, then booted with SEED_DEMO_USER=true) still
     # converge to the full dev state.
     if db.query(Faculty).first() is None:
-        engineering = Faculty(id="engineering", name="Faculty of Engineering")
-        science = Faculty(id="science", name="Faculty of Science")
-        commerce = Faculty(id="commerce", name="Faculty of Commerce")
-        medicine = Faculty(id="medicine", name="Faculty of Medicine")
-        db.add_all([engineering, science, commerce, medicine])
+        db.add_all(
+            [
+                Faculty(id="ENGINEERING", name="Engineering"),
+                Faculty(id="PHYSICAL_THERAPY", name="Physical Therapy"),
+                Faculty(id="ART_DESIGN", name="Art & Design"),
+            ]
+        )
         db.flush()
 
         db.add_all(
@@ -94,7 +96,7 @@ def seed(db: Session, seed_demo_user: bool = False) -> None:
                 student_code="S-DEMO1",
                 name="Demo Student",
                 password_hash=hash_password("demo123"),
-                faculty_id="engineering",
+                faculty_id="ENGINEERING",
                 points=45,
             )
         )
@@ -104,7 +106,68 @@ def seed(db: Session, seed_demo_user: bool = False) -> None:
         db.add(
             OperationCounter(day=today, value=0)
         )
+
+    _seed_reward_catalog(db)
     db.commit()
+
+
+def _seed_reward_catalog(db: Session) -> None:
+    """Idempotent starter catalog — the four reward products the program
+    actually offers. Admins edit/deactivate them from the panel; seeding
+    only inserts what is missing and never resurrects deleted rows."""
+    from ..models import Reward
+
+    catalog = [
+        dict(
+            id="rw-vodafone-10",
+            category="cash",
+            name="Vodafone Cash 10 EGP",
+            description="10 EGP transferred to your Vodafone Cash wallet by the admin team.",
+            provider="Vodafone Cash",
+            points_cost=100,
+            value_label="10 EGP",
+            value_amount=10.0,
+            icon="phone_android",
+            requires_destination=True,
+        ),
+        dict(
+            id="rw-instapay-25",
+            category="cash",
+            name="InstaPay Transfer 25 EGP",
+            description="25 EGP sent to your InstaPay handle (bank account or wallet).",
+            provider="InstaPay",
+            points_cost=250,
+            value_label="25 EGP",
+            value_amount=25.0,
+            icon="account_balance",
+            requires_destination=True,
+        ),
+        dict(
+            id="rw-mix-coffee-20",
+            category="food",
+            name="MIX Coffee 20% Off",
+            description="20% off any drink at the MIX Coffee campus branch.",
+            provider="MIX Coffee",
+            points_cost=60,
+            value_label="20% OFF",
+            value_amount=0.20,
+            icon="local_cafe",
+        ),
+        dict(
+            id="rw-copy-center-30",
+            category="printing",
+            name="Copy Center 30 Pages",
+            description="30 black-and-white pages printed free at the campus copy center.",
+            provider="Campus Copy Center",
+            points_cost=80,
+            value_label="30 pages",
+            value_amount=30.0,
+            icon="print",
+        ),
+    ]
+    for row in catalog:
+        if db.get(Reward, row["id"]) is None:
+            db.add(Reward(**row))
 
 
 def seed_faculty_leaderboard(db: Session) -> None:

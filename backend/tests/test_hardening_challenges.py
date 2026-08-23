@@ -120,16 +120,8 @@ def test_other_users_are_not_affected_by_someone_elses_completion(
     complete(client, session["operation_id"])
 
     # Register a fresh user; they have NOT completed anything.
-    r = client.post(
-        "/api/v1/auth/register",
-        json={
-            "email": "fresh@recycle.vision",
-            "password": "password123",
-            "name": "Fresh",
-            "facultyId": "science",
-        },
-    )
-    other_auth = {"Authorization": f"Bearer {r.json()['token']}"}
+    from .conftest import register_and_login
+    other_auth = register_and_login(client, "fresh@recycle.vision", "password123")
     items = client.get("/api/v1/challenges", headers=other_auth).json()["items"]
     entry = next(c for c in items if c["id"] == "ch-test-1")
     assert entry["completed"] is False

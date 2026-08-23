@@ -21,7 +21,7 @@ def predict(
 ) -> dict:
     image_bytes = image.file.read()
     if not image_bytes:
-        raise HTTPException(status_code=422, detail="Empty image")
+        raise HTTPException(status_code=422, detail="The uploaded image is empty. Please try again.")
     try:
         return PredictService().predict(db, user, image_bytes)
     except AiGateRejection as exc:

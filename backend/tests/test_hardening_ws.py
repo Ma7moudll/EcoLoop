@@ -11,17 +11,9 @@ from .test_deposit import create_session
 
 def _second_user_token(client) -> str:
     """Registers + logs in an attacker (non-owning) account."""
-    r = client.post(
-        "/api/v1/auth/register",
-        json={
-            "email": "attacker@recycle.vision",
-            "password": "password123",
-            "name": "Attacker",
-            "facultyId": "engineering",
-        },
-    )
-    assert r.status_code == 200, r.text
-    return r.json()["token"]
+    from .conftest import register_and_login
+    headers = register_and_login(client, "attacker@recycle.vision", "password123")
+    return headers["Authorization"].split(" ", 1)[1]
 
 
 def _first_message(client, url: str):

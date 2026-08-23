@@ -44,6 +44,12 @@ def broker(tmp_path_factory):
     if not PASSWD_BIN.exists():
         pytest.skip("mosquitto_passwd not installed")
 
+    if not _port_free(BROKER_PORT):
+        pytest.skip(
+            f"TCP {BROKER_PORT} is already in use (dev stack mosquitto?). "
+            "Stop the dev broker before running the integration suite."
+        )
+
     passwd_file = tmp_path_factory.mktemp("broker") / "passwd"
     subprocess.run(
         [str(PASSWD_BIN), "-b", "-c", str(passwd_file), BROKER_USER, BROKER_PASS],
@@ -85,6 +91,8 @@ def broker(tmp_path_factory):
     )
     deadline = time.time() + 15
     while time.time() < deadline:
+        if proc.poll() is not None:
+            pytest.skip("mosquitto exited immediately (config/port problem)")
         if not _port_free(BROKER_PORT):
             break
         time.sleep(0.1)
