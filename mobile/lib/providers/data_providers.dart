@@ -54,6 +54,24 @@ final stationsProvider = FutureProvider.autoDispose<List<Station>>((ref) async {
   return ref.watch(dataRepositoryProvider).fetchStations();
 });
 
+/// Active rewards catalog + the current points balance.
+final rewardsCatalogProvider =
+    FutureProvider.autoDispose<RewardsCatalog>((ref) async {
+  final userId = ref.watch(currentUserIdProvider);
+  if (userId == null) {
+    return const RewardsCatalog(balance: 0, rewards: []);
+  }
+  return ref.watch(dataRepositoryProvider).fetchRewards();
+});
+
+/// This user's redemption history (codes, cash-fulfillment states).
+final myRedemptionsProvider =
+    FutureProvider.autoDispose<List<RewardRedemption>>((ref) async {
+  final userId = ref.watch(currentUserIdProvider);
+  if (userId == null) return const [];
+  return ref.watch(dataRepositoryProvider).fetchMyRedemptions();
+});
+
 /// Invalidates everything that depends on a points-changing deposit.
 void invalidateData(WidgetRef ref) {
   for (final provider in [
@@ -63,6 +81,8 @@ void invalidateData(WidgetRef ref) {
     challengesProvider,
     leaderboardProvider,
     stationsProvider,
+    rewardsCatalogProvider,
+    myRedemptionsProvider,
   ]) {
     ref.invalidate(provider);
   }

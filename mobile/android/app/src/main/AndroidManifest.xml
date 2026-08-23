@@ -10,9 +10,10 @@
         android:name="android.hardware.camera"
         android:required="false"/>
     <application
-        android:label="recycle_vision"
+        android:label="EcoLoop"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false">
         <activity
             android:name=".MainActivity"
             android:exported="true"

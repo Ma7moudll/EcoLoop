@@ -48,6 +48,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     setState(() => _busy = true);
     try {
       await ref.read(sessionProvider.notifier).login(email, password);
+      // Navigation relies on app.dart swapping home to the shell once the
+      // session is ready. If this screen was PUSHED above it (e.g. after
+      // registration), pop so the authenticated home is revealed.
+      if (!mounted) return;
+      if (Navigator.of(context).canPop()) Navigator.of(context).pop();
     } on ApiException catch (e) {
       setState(() => _banner = e.message);
     } catch (_) {
@@ -59,6 +64,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final session = ref.watch(sessionProvider);
+    final restored = session.status == SessionStatus.ready &&
+        session.autoRestored &&
+        session.user != null;
+
     return Scaffold(
       body: SafeArea(
         child: SingleChildScrollView(
@@ -68,6 +78,29 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             children: [
               const AppLogo(size: 40),
               const SizedBox(height: 30),
+              if (restored) ...[
+                _RestoredSessionCard(
+                  name: session.user!.name,
+                  subtitle: session.user!.studentCode,
+                  onContinue: () =>
+                      ref.read(sessionProvider.notifier).continueRestored(),
+                ),
+                const SizedBox(height: 22),
+                Row(
+                  children: [
+                    const Expanded(child: Divider(color: AppColors.line)),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: Text(
+                        'or sign in with another account',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                    const Expanded(child: Divider(color: AppColors.line)),
+                  ],
+                ),
+                const SizedBox(height: 22),
+              ],
               Text(
                 'Welcome back!',
                 style: Theme.of(context).textTheme.headlineMedium,
@@ -144,7 +177,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    'New to Recycle Vision?',
+                    'New to EcoLoop?',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                   TextButton(
@@ -167,5 +200,98 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   void _passwordFocus(BuildContext context) {
     FocusScope.of(context).nextFocus();
+  }
+}
+
+/// One-tap entry for a validated stored session. Nothing happens until the
+/// user taps Continue — the app never silently opens an account.
+class _RestoredSessionCard extends StatelessWidget {
+  final String name;
+  final String subtitle;
+  final VoidCallback onContinue;
+
+  const _RestoredSessionCard({
+    required this.name,
+    required this.subtitle,
+    required this.onContinue,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final initials = name.split(' ').where((w) => w.isNotEmpty).map((w) => w[0]).take(2).join().toUpperCase();
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.mint,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.green.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                alignment: Alignment.center,
+                decoration: const BoxDecoration(
+                  color: AppColors.green,
+                  shape: BoxShape.circle,
+                ),
+                child: Text(
+                  initials.isEmpty ? '?' : initials,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Welcome back,',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    Text(
+                      name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.foreground,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (subtitle.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                subtitle,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+          ],
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            height: 46,
+            child: ElevatedButton(
+              onPressed: onContinue,
+              child: const Text('Continue'),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

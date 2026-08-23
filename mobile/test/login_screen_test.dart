@@ -49,5 +49,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(RegisterScreen), findsOneWidget);
+    // The faculty picker is part of the form and is required before submit.
+    expect(find.text('FACULTY'), findsOneWidget);
+    expect(find.text('Select your faculty'), findsWidgets);
+    expect(find.byType(DropdownButtonFormField<String>), findsOneWidget);
   });
 }

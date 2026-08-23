@@ -8,7 +8,7 @@ import 'package:shared/shared.dart';
 
 void main() {
   group('AppBottomNav', () {
-    testWidgets('renders five destinations', (tester) async {
+    testWidgets('renders five destinations, no scan slot', (tester) async {
       await tester.pumpWidget(const MaterialApp(
         home: Scaffold(
           body: AppBottomNav(currentIndex: 0, onSelected: _noop),
@@ -16,13 +16,14 @@ void main() {
       ));
       expect(find.text('Home'), findsOneWidget);
       expect(find.text('Impact'), findsOneWidget);
+      expect(find.text('Rewards'), findsOneWidget);
       expect(find.text('Leaderboard'), findsOneWidget);
       expect(find.text('Profile'), findsOneWidget);
-      expect(find.byIcon(Icons.recycling), findsOneWidget);
+      // Scanning moved to the floating action button — not in the bar.
+      expect(find.byIcon(Icons.recycling), findsNothing);
     });
 
-    testWidgets('tapping the emphasized recycle action reports index 2',
-        (tester) async {
+    testWidgets('tapping Rewards reports index 2', (tester) async {
       int? selected;
       await tester.pumpWidget(MaterialApp(
         home: Scaffold(
@@ -32,7 +33,7 @@ void main() {
           ),
         ),
       ));
-      await tester.tap(find.byIcon(Icons.recycling));
+      await tester.tap(find.text('Rewards'));
       expect(selected, 2);
     });
 

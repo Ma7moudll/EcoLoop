@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../core/app_theme.dart';
 
-/// Bottom navigation shell with the Scan action emphasized center pill.
-/// Five destinations: Home, Impact, Scan, Leaderboard, Profile (spec §1/§2).
+/// Bottom navigation bar with five destinations:
+/// Home, Impact, Rewards, Leaderboard, Profile.
+/// Scanning lives on the floating action button outside this bar.
 class AppBottomNav extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onSelected;
@@ -51,7 +52,13 @@ class AppBottomNav extends StatelessWidget {
                 selected: currentIndex == 1,
                 onTap: () => onSelected(1),
               ),
-              _RecycleButton(selected: currentIndex == 2, onTap: () => onSelected(2)),
+              _NavItem(
+                index: 2,
+                icon: Icons.card_giftcard_rounded,
+                label: 'Rewards',
+                selected: currentIndex == 2,
+                onTap: () => onSelected(2),
+              ),
               _NavItem(
                 index: 3,
                 icon: Icons.leaderboard_rounded,
@@ -111,43 +118,6 @@ class _NavItem extends StatelessWidget {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Raised circular recycle button that breaks out of the dark bar. Opens the
-/// full-screen station-camera recycle flow.
-class _RecycleButton extends StatelessWidget {
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _RecycleButton({required this.selected, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Transform.translate(
-        offset: const Offset(0, -24),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          width: 62,
-          height: 62,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: selected ? AppColors.deepGreen : AppColors.green,
-            border: Border.all(color: AppColors.appSurface, width: 3),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.green.withValues(alpha: 0.45),
-                blurRadius: 14,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
-          child: const Icon(Icons.recycling, color: Colors.white, size: 26),
         ),
       ),
     );

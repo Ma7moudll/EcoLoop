@@ -82,7 +82,12 @@ class _RecycleFlowScreenState extends ConsumerState<RecycleFlowScreen> {
       if (result.deposit.status.isTerminal) {
         _finish(result);
       } else {
-        setState(() => _phase = _FlowPhase.error);
+        setState(() {
+          _phase = _FlowPhase.error;
+          _error =
+              'The deposit ended in an unexpected state '
+              '(${result.deposit.status.apiValue}). Please try again.';
+        });
       }
     } on ApiException catch (e) {
       if (!mounted) return;
@@ -400,7 +405,7 @@ class _CameraPulseState extends State<_CameraPulse>
           color: AppColors.green,
           shape: BoxShape.circle,
         ),
-        child: const Icon(Icons.qr_code_scanner, color: Colors.white, size: 30),
+        child: const Icon(Icons.sensors, color: Colors.white, size: 30),
       ),
     );
   }

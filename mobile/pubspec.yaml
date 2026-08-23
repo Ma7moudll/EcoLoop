@@ -22,6 +22,9 @@ dependencies:
   # Real-session token storage on-device
   flutter_secure_storage: ^9.2.4
 
+  # Profile photo selection (gallery only — the phone camera is station-only)
+  image_picker: ^1.1.2
+
   # Date/time formatting
   intl: ^0.19.0
 

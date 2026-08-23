@@ -63,12 +63,14 @@ class FakeAuthRepository extends AuthRepository {
       ('tok', fakeUser());
 
   @override
-  Future<(String, AppUser)> register({
+  Future<AppUser> register({
     required String name,
     required String email,
+    required String facultyId,
     required String password,
+    required String studentCode,
   }) async =>
-      ('tok', fakeUser());
+      fakeUser();
 
   @override
   Future<AppUser> fetchMe() async => fakeUser();

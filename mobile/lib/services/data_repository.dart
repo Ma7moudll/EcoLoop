@@ -56,7 +56,53 @@ class DataRepository {
         .map((e) => Station.fromJson(e as Map<String, dynamic>))
         .toList();
   }
+
+  /// Active catalog plus the current points balance.
+  Future<RewardsCatalog> fetchRewards() async {
+    return RewardsCatalog.fromJson(await _api.get('/rewards'));
+  }
+
+  Future<List<RewardRedemption>> fetchMyRedemptions() async {
+    final body = await _api.get('/rewards/redemptions');
+    return (body['redemptions'] as List<dynamic>)
+        .map((e) => RewardRedemption.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Atomically exchanges points for [rewardId]. [idempotencyKey] makes the
+  /// request safe to retry — the server returns the original redemption for
+  /// a repeated key instead of deducting twice.
+  Future<RedemptionResult> redeemReward(
+    String rewardId, {
+    required String idempotencyKey,
+    String? destination,
+  }) async {
+    final body = await _api.post(
+      '/rewards/$rewardId/redeem',
+      data: {
+        'idempotency_key': idempotencyKey,
+        if (destination != null && destination.trim().isNotEmpty)
+          'destination': destination.trim(),
+      },
+    );
+    return RedemptionResult(
+      redemption:
+          RewardRedemption.fromJson(body['redemption'] as Map<String, dynamic>),
+      balance: (body['balance'] as num).toInt(),
+    );
+  }
+
+  /// Cancels an unused code; the server refunds the points.
+  Future<RedemptionResult> cancelRedemption(String redemptionId) async {
+    final body = await _api.post('/rewards/redemptions/$redemptionId/cancel');
+    return RedemptionResult(
+      redemption:
+          RewardRedemption.fromJson(body['redemption'] as Map<String, dynamic>),
+      balance: (body['balance'] as num).toInt(),
+    );
+  }
 }
+
 
 enum LeaderScope {
   students('students'),
@@ -132,4 +178,59 @@ abstract final class Validation {
 
   static String? validatePassword(String password) =>
       password.length < 6 ? 'Password must be at least 6 characters.' : null;
+}
+/// Result of a successful redeem/cancel: the redemption plus the caller's
+/// fresh balance so the UI never has to guess.
+class RedemptionResult {
+  final RewardRedemption redemption;
+  final int balance;
+
+  const RedemptionResult({required this.redemption, required this.balance});
+}
+
+extension RewardsDataRepository on DataRepository {
+  /// Active catalog plus the current points balance.
+  Future<RewardsCatalog> fetchRewards() async {
+    return RewardsCatalog.fromJson(await _api.get('/rewards'));
+  }
+
+  Future<List<RewardRedemption>> fetchMyRedemptions() async {
+    final body = await _api.get('/rewards/redemptions');
+    return (body['redemptions'] as List<dynamic>)
+        .map((e) => RewardRedemption.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Atomically exchanges points for [rewardId]. [idempotencyKey] makes the
+  /// request safe to retry — the server returns the original redemption for
+  /// a repeated key instead of deducting twice.
+  Future<RedemptionResult> redeemReward(
+    String rewardId, {
+    required String idempotencyKey,
+    String? destination,
+  }) async {
+    final body = await _api.post(
+      '/rewards/$rewardId/redeem',
+      data: {
+        'idempotency_key': idempotencyKey,
+        if (destination != null && destination.trim().isNotEmpty)
+          'destination': destination.trim(),
+      },
+    );
+    return RedemptionResult(
+      redemption: RewardRedemption.fromJson(
+          body['redemption'] as Map<String, dynamic>),
+      balance: (body['balance'] as num).toInt(),
+    );
+  }
+
+  /// Cancels an unused code; the server refunds the points.
+  Future<RedemptionResult> cancelRedemption(String redemptionId) async {
+    final body = await _api.post('/rewards/redemptions/$redemptionId/cancel');
+    return RedemptionResult(
+      redemption: RewardRedemption.fromJson(
+          body['redemption'] as Map<String, dynamic>),
+      balance: (body['balance'] as num).toInt(),
+    );
+  }
 }
