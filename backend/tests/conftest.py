@@ -92,6 +92,9 @@ def fresh_db(client):
     # In-memory security state must not leak between tests.
     auth_router._login_limiter.reset()
     auth_router._register_limiter.reset()
+    auth_router._forgot_limiter.reset()
+    auth_router._reset_limiter.reset()
+    auth_router._verify_limiter.reset()
     revocation_module.revocations.reset()
     yield
 
@@ -115,6 +118,21 @@ def publisher(monkeypatch):
     fp = FakePublisher()
     monkeypatch.setattr(deposit_router, "_publisher", fp)
     return fp
+
+
+def register_and_login(client, email: str, password: str = "secret99") -> dict:
+    """Registration creates the account only (no token since the
+    no-auto-login contract); an explicit login establishes the session."""
+    r = client.post(
+        "/api/v1/auth/register",
+        json={"name": email.split("@")[0], "email": email, "facultyId": "ENGINEERING",
+              "password": password},
+    )
+    assert r.status_code == 201, r.text
+    assert "token" not in r.json()
+    r = client.post("/api/v1/auth/login", json={"email": email, "password": password})
+    assert r.status_code == 200, r.text
+    return {"Authorization": f"Bearer {r.json()['token']}"}
 
 
 def _predict(client, token: str, fake_ai: FakeAi, monkeypatch) -> dict:

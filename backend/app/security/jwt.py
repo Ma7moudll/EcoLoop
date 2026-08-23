@@ -22,10 +22,18 @@ def _sign(payload: bytes, secret: str) -> str:
     return _b64(h)
 
 
-def create_access_token(user_id: str, secret: str, ttl_seconds: int) -> str:
+def create_access_token(user_id: str, secret: str, ttl_seconds: int, token_version: int = 0) -> str:
     header = {"alg": "HS256", "typ": "JWT"}
     now = int(time.time())
-    body = {"sub": user_id, "iat": now, "exp": now + ttl_seconds, "jti": str(uuid.uuid4())}
+    body = {
+        "sub": user_id,
+        "iat": now,
+        "exp": now + ttl_seconds,
+        "jti": str(uuid.uuid4()),
+        # Token generation: bumped on password change/reset so every token
+        # issued before the credential change is refused from that moment.
+        "ver": int(token_version),
+    }
     h = _b64(json.dumps(header, separators=(",", ":")).encode())
     b = _b64(json.dumps(body, separators=(",", ":")).encode())
     return f"{h}.{b}.{_sign(f'{h}.{b}'.encode(), secret)}"

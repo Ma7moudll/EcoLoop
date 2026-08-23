@@ -25,6 +25,12 @@ class User(Base):
     # "student" | "admin" — admin gates station/user/challenge management.
     role: Mapped[str] = mapped_column(String(16), nullable=False, default="student")
     email_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Bumped on password change/reset; JWTs carry `ver` and older generations
+    # are refused (see security.deps). Invalidates every outstanding token.
+    token_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Profile photo generation counter: 0 = no photo; bumped on every upload
+    # or removal so clients can cache-bust the avatar URL.
+    avatar_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

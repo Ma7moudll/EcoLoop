@@ -127,8 +127,19 @@ class Settings(BaseSettings):
     smtp_from: str = "noreply@ecoloop.local"
     password_reset_token_ttl_seconds: int = 30 * 60
     email_verification_token_ttl_seconds: int = 24 * 60 * 60
+    # When true, unverified accounts are refused at login. Requires a real
+    # delivery path (SMTP): the console provider only logs the link server-side,
+    # so gating login with it would lock every new user out permanently.
+    email_verification_required: bool = False
     # Base URL used inside reset/verification links (env-configured).
     public_base_url: str = "http://localhost:3000"
+
+    # -- Profile avatars -----------------------------------------------------
+    # Directory where uploaded profile photos are stored as
+    # <user_id>.jpg (re-encoded server-side is out of scope; the file keeps
+    # its validated image bytes). Version counter lives in users.avatar_version.
+    avatars_dir: str = "data/avatars"
+    avatar_max_bytes: int = 2 * 1024 * 1024  # 2 MB hard ceiling
 
     # -- Debug ---------------------------------------------------------------
     # When true, mounts the debug-only /debug/image-sha256 fingerprint route
@@ -172,6 +183,24 @@ class Settings(BaseSettings):
             problems.append("SEED_DEMO_USER must be false in production")
         if self.email_provider == "smtp" and not self.smtp_password:
             problems.append("SMTP_PASSWORD is required when EMAIL_PROVIDER=smtp")
+        if self.jwt_access_token_minutes > 240:
+            problems.append(
+                f"JWT_ACCESS_TOKEN_MINUTES={self.jwt_access_token_minutes} is too long for production "
+                "(recommended ≤ 240 minutes / 4 hours)"
+            )
+        if self.public_base_url.startswith("http://localhost"):
+            problems.append(
+                "PUBLIC_BASE_URL must not be localhost in production "
+                "(password reset / verification links will be broken)"
+            )
+        if self.email_provider == "smtp" and not self.smtp_host:
+            problems.append("SMTP_HOST is required when EMAIL_PROVIDER=smtp")
+        if self.email_verification_required and self.email_provider != "smtp":
+            problems.append(
+                "EMAIL_VERIFICATION_REQUIRED=true requires EMAIL_PROVIDER=smtp "
+                "(the console provider cannot deliver verification links, so "
+                "every new account would be locked out)"
+            )
 
         if problems:
             raise ProductionSecretError(

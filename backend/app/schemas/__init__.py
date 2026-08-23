@@ -10,7 +10,7 @@ class RegisterRequest(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     email: str
     studentCode: str | None = Field(default=None, max_length=64)
-    facultyId: str = Field(default="engineering")
+    facultyId: str = Field(...)
     password: str = Field(min_length=6, max_length=128)
 
 
@@ -21,6 +21,15 @@ class LoginRequest(BaseModel):
 
 class AuthResponse(BaseModel):
     token: str
+    user: dict[str, Any]
+
+
+class RegisterResponse(BaseModel):
+    """Account-creation response — deliberately NOT an AuthResponse.
+
+    Registration must never authenticate: no token is minted, and the client
+    must send the user through /auth/login to establish a session."""
+
     user: dict[str, Any]
 
 

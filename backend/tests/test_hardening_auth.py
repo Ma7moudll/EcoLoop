@@ -69,7 +69,7 @@ def test_register_rate_limited(client, monkeypatch):
         "email": "ratelimit@recycle.vision",
         "password": "password123",
         "name": "RL",
-        "facultyId": "engineering",
+        "facultyId": "ENGINEERING",
     }
     codes = []
     for i in range(12):
@@ -203,10 +203,10 @@ def test_registration_sends_verification_and_verify_email_works(
             "email": "verify@recycle.vision",
             "password": "password123",
             "name": "Verify Me",
-            "facultyId": "science",
+            "facultyId": "ENGINEERING",
         },
     )
-    assert r.status_code == 200
+    assert r.status_code == 201
     verification = next(
         m for m in mailer.messages if "Verify" in m["subject"]
     )
@@ -232,7 +232,7 @@ def test_verify_email_token_is_single_use(client, monkeypatch):
             "email": "verify-once@recycle.vision",
             "password": "password123",
             "name": "Once",
-            "facultyId": "science",
+            "facultyId": "ENGINEERING",
         },
     )
     token = next(
