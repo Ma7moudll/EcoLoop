@@ -42,11 +42,31 @@ class _Confirmed extends ConsumerWidget {
       backgroundColor: AppColors.background,
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Spacer(flex: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+              const Text(
+                'Success! 🎉',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 26,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.green,
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Deposit Confirmed',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.foreground,
+                ),
+              ),
+              const SizedBox(height: 24),
               Center(
                 child: TweenAnimationBuilder<double>(
                   duration: const Duration(milliseconds: 700),
@@ -55,85 +75,114 @@ class _Confirmed extends ConsumerWidget {
                   builder: (context, value, child) =>
                       Transform.scale(scale: value, child: child),
                   child: Container(
-                    width: 96,
-                    height: 96,
+                    width: 132,
+                    height: 132,
                     decoration: BoxDecoration(
-                      color: AppColors.green,
+                      color: AppColors.card,
                       shape: BoxShape.circle,
+                      border: Border.all(color: AppColors.mint, width: 8),
                       boxShadow: [
                         BoxShadow(
-                          color: AppColors.green.withValues(alpha: 0.35),
+                          color: AppColors.green.withValues(alpha: 0.18),
                           blurRadius: 24,
                           offset: const Offset(0, 10),
                         ),
                       ],
                     ),
-                    child: const Icon(Icons.check_rounded,
-                        color: Colors.white, size: 52),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.eco_rounded,
+                            color: AppColors.green, size: 26),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${deposit.weightGrams.toStringAsFixed(1)} g',
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.foreground,
+                          ),
+                        ),
+                        const Text(
+                          'Weight detected',
+                          style: TextStyle(
+                              fontSize: 10, color: AppColors.muted),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-              const SizedBox(height: 26),
-              const Text(
-                'Deposit complete!',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.foreground,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                '${deposit.weightGrams.toStringAsFixed(1)} g of '
-                '${deposit.predictedClass.label} routed to compartment '
-                '#${deposit.expectedPosition}.',
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                    fontSize: 12.5, color: AppColors.muted),
-              ),
-              const SizedBox(height: 26),
+              const SizedBox(height: 22),
               Container(
-                padding: const EdgeInsets.all(18),
+                padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
                   color: AppColors.card,
                   borderRadius: BorderRadius.circular(AppRadii.card),
-                  border: Border.all(color: clsStyle.soft, width: 1.4),
+                  border: Border.all(color: AppColors.line),
                 ),
                 child: Column(
                   children: [
+                    _CheckRow(
+                        icon: Icons.check_circle_rounded,
+                        label: 'Weight confirmed',
+                        detail:
+                            '${deposit.weightGrams.toStringAsFixed(1)} g recorded'),
+                    _CheckRow(
+                        icon: Icons.check_circle_rounded,
+                        label: 'Item accepted',
+                        detail:
+                            '${deposit.predictedClass.label} · compartment #${deposit.expectedPosition}'),
+                    _CheckRow(
+                        icon: Icons.check_circle_rounded,
+                        label: 'Points awarded',
+                        detail: 'credited to your balance'),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: AppColors.mint,
+                  borderRadius: BorderRadius.circular(AppRadii.card),
+                  border: Border.all(color: AppColors.green.withValues(alpha: 0.25)),
+                ),
+                child: Column(
+                  children: [
+                    const Text(
+                      'You earned',
+                      style: TextStyle(fontSize: 11.5, color: AppColors.muted),
+                    ),
+                    const SizedBox(height: 2),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(clsStyle.icon, size: 22, color: clsStyle.color),
                         const SizedBox(width: 10),
                         Text(
-                          '+$total pts',
+                          '+$total POINTS',
                           style: const TextStyle(
-                            fontSize: 30,
+                            fontSize: 28,
                             fontWeight: FontWeight.w800,
                             color: AppColors.green,
+                            letterSpacing: 0.5,
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 6),
-                    const Text(
-                      'Points awarded by the station',
-                      style:
-                          TextStyle(fontSize: 11, color: AppColors.muted),
-                    ),
                     if (result.challengeBonus > 0) ...[
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 10, vertical: 6),
                         decoration: BoxDecoration(
-                          color: AppColors.yellow.withValues(alpha: 0.12),
+                          color: AppColors.yellow.withValues(alpha: 0.16),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
-                          '+${result.challengeBonus} challenge bonus',
+                          'includes +${result.challengeBonus} challenge bonus',
                           style: const TextStyle(
                             fontSize: 10.5,
                             fontWeight: FontWeight.w800,
@@ -145,11 +194,11 @@ class _Confirmed extends ConsumerWidget {
                   ],
                 ),
               ),
-              const Spacer(flex: 3),
+              const SizedBox(height: 16),
               ElevatedButton(
                 onPressed: () =>
                     Navigator.of(context).popUntil((route) => route.isFirst),
-                child: const Text('Done'),
+                child: const Text('Great!'),
               ),
               const SizedBox(height: 10),
               TextButton(
@@ -159,9 +208,47 @@ class _Confirmed extends ConsumerWidget {
                 },
                 child: const Text('View my impact'),
               ),
-            ],
+              ],
+            ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _CheckRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String detail;
+  const _CheckRow({
+    required this.icon,
+    required this.label,
+    required this.detail,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: AppColors.green),
+          const SizedBox(width: 10),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w700,
+              color: AppColors.foreground,
+            ),
+          ),
+          const Spacer(),
+          Text(
+            detail,
+            style: const TextStyle(fontSize: 10.5, color: AppColors.muted),
+          ),
+        ],
       ),
     );
   }

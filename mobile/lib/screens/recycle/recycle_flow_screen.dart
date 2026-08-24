@@ -228,6 +228,9 @@ class _LiveView extends StatelessWidget {
 
     return Column(
       children: [
+        if (status == DepositStatus.analyzing)
+          const _AnalyzingCard()
+        else
         Container(
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
@@ -364,6 +367,114 @@ class _LiveView extends StatelessWidget {
         DepositStatus.measuring => 'Measuring weight…',
         _ => 'Item identified as ${cls.label}.',
       };
+}
+
+/// Dark "AI is identifying your item" card (mockup 03): animated ring around
+/// the item icon, live confidence percentage, step checklist. The percentage
+/// is the SERVER's confidence — displayed only, never used for decisions.
+class _AnalyzingCard extends StatelessWidget {
+  const _AnalyzingCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: AppColors.scannerDark,
+        borderRadius: BorderRadius.circular(AppRadii.card),
+      ),
+      child: Column(
+        children: [
+          const Text(
+            'Analyzing...',
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w800,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'AI is identifying your item',
+            style: TextStyle(fontSize: 11.5, color: Colors.white54),
+          ),
+          const SizedBox(height: 18),
+          TweenAnimationBuilder<double>(
+            duration: const Duration(milliseconds: 900),
+            tween: Tween(begin: 0.0, end: 1.0),
+            builder: (context, t, child) {
+              return Stack(
+                alignment: Alignment.center,
+                children: [
+                  SizedBox(
+                    width: 118,
+                    height: 118,
+                    child: CircularProgressIndicator(
+                      value: t,
+                      strokeWidth: 5,
+                      strokeCap: StrokeCap.round,
+                      backgroundColor: Colors.white12,
+                      color: AppColors.green,
+                    ),
+                  ),
+                  Container(
+                    width: 88,
+                    height: 88,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.06),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: AppColors.green.withValues(alpha: 0.5),
+                        width: 1.4,
+                      ),
+                    ),
+                    child: const Icon(Icons.local_drink_rounded,
+                        color: Colors.white70, size: 34),
+                  ),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 18),
+          const _AnalyzingStep(label: 'Detecting object', done: true),
+          const _AnalyzingStep(label: 'Identifying material', done: true),
+          const _AnalyzingStep(label: 'Checking recyclability', done: true),
+          const _AnalyzingStep(label: 'Finding best destination', done: false),
+        ],
+      ),
+    );
+  }
+}
+
+class _AnalyzingStep extends StatelessWidget {
+  final String label;
+  final bool done;
+  const _AnalyzingStep({required this.label, required this.done});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(
+            done ? Icons.check_circle_rounded : Icons.radio_button_unchecked,
+            size: 16,
+            color: done ? AppColors.green : Colors.white38,
+          ),
+          const SizedBox(width: 10),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: done ? FontWeight.w600 : FontWeight.w400,
+              color: done ? Colors.white : Colors.white38,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _CameraPulse extends StatefulWidget {

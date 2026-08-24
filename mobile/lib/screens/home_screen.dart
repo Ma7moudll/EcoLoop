@@ -102,16 +102,16 @@ class HomeScreen extends ConsumerWidget {
                     builder: (_) => const RecycleScreen()),
               ),
               borderRadius: BorderRadius.circular(AppRadii.card),
-              child: Container(
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [AppColors.blue, Color(0xFF0F6FC2)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
+                child: Container(
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [AppColors.green, Color(0xFF0C7A69)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(AppRadii.card),
                   ),
-                  borderRadius: BorderRadius.circular(AppRadii.card),
-                ),
                 child: const Row(
                   children: [
                     Icon(Icons.recycling, color: Colors.white, size: 32),

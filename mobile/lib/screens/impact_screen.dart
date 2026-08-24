@@ -35,10 +35,54 @@ class ImpactScreen extends ConsumerWidget {
         ),
         data: (impact) {
           if (impact == null) return const EmptyView(icon: Icons.eco, title: 'Impact unavailable');
+          final totalKg = impact.breakdown.fold<double>(0, (m, b) => m + b.kg);
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
             children: [
-              // Top stats
+              // Hero — total points (mockup 08)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 26, horizontal: 18),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [AppColors.green, Color(0xFF0C7A69)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(AppRadii.card),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.green.withValues(alpha: 0.25),
+                      blurRadius: 18,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    const Text(
+                      'Your Total Impact',
+                      style: TextStyle(fontSize: 12.5, color: Colors.white70),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${impact.totalPoints}',
+                      style: const TextStyle(
+                        fontSize: 44,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                        letterSpacing: -1,
+                      ),
+                    ),
+                    const Text(
+                      'Total Points',
+                      style: TextStyle(fontSize: 12, color: Colors.white70),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+              // 3-stat row (StatTile expands itself — never wrap it)
               Row(
                 children: [
                   StatTile(
@@ -49,46 +93,43 @@ class ImpactScreen extends ConsumerWidget {
                   ),
                   const SizedBox(width: 10),
                   StatTile(
+                    label: 'Items',
+                    value: '${impact.itemsRecycled}',
+                    icon: Icons.inventory_2_outlined,
+                    accent: AppColors.blue,
+                  ),
+                  const SizedBox(width: 10),
+                  StatTile(
                     label: 'CO₂ saved',
                     value: Fmt.co2(impact.co2SavedKg),
-                    accent: AppColors.blue,
+                    accent: AppColors.deepGreen,
                     icon: Icons.cloud_outlined,
                   ),
                 ],
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 22),
               Row(
                 children: [
-                  StatTile(
-                    label: 'Items',
-                    value: '${impact.itemsRecycled}',
-                    icon: Icons.inventory_2_outlined,
-                    accent: AppColors.deepGreen,
+                  const Text(
+                    'Waste Breakdown',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.foreground,
+                    ),
                   ),
-                  const SizedBox(width: 10),
-                  StatTile(
-                    label: 'Lifetime points',
-                    value: '${impact.totalPoints}',
-                    icon: Icons.star_rounded,
-                    accent: AppColors.yellow,
+                  const Spacer(),
+                  Text(
+                    '${impact.breakdown.length} materials',
+                    style: const TextStyle(fontSize: 11, color: AppColors.muted),
                   ),
                 ],
-              ),
-              const SizedBox(height: 22),
-              const Text(
-                'Materials breakdown',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.foreground,
-                ),
               ),
               const SizedBox(height: 10),
               for (final row in impact.breakdown)
                 _BreakdownRow(
                   row: row,
-                  maxKg: impact.breakdown
-                      .fold<double>(0, (m, b) => b.kg > m ? b.kg : m),
+                  totalKg: totalKg,
                 ),
               const SizedBox(height: 14),
               Container(
@@ -121,13 +162,14 @@ class ImpactScreen extends ConsumerWidget {
 
 class _BreakdownRow extends StatelessWidget {
   final WasteBreakdown row;
-  final double maxKg;
-  const _BreakdownRow({required this.row, required this.maxKg});
+  final double totalKg;
+  const _BreakdownRow({required this.row, required this.totalKg});
 
   @override
   Widget build(BuildContext context) {
     final style = styleForClass(row.wasteClass);
-    final fraction = maxKg <= 0 ? 0.0 : (row.kg / maxKg).clamp(0.0, 1.0);
+    final fraction = totalKg <= 0 ? 0.0 : (row.kg / totalKg).clamp(0.0, 1.0);
+    final percent = totalKg <= 0 ? 0 : ((row.kg / totalKg) * 100).round();
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -142,7 +184,14 @@ class _BreakdownRow extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(style.icon, size: 16, color: style.color),
+              Container(
+                padding: const EdgeInsets.all(5),
+                decoration: BoxDecoration(
+                  color: style.soft,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(style.icon, size: 14, color: style.color),
+              ),
               const SizedBox(width: 8),
               Text(
                 row.wasteClass.label,
@@ -154,8 +203,12 @@ class _BreakdownRow extends StatelessWidget {
               ),
               const Spacer(),
               Text(
-                '${Fmt.kilo(row.kg)} · ${row.count} items',
-                style: const TextStyle(fontSize: 11, color: AppColors.muted),
+                '${row.count} items · $percent%',
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.muted,
+                ),
               ),
             ],
           ),
@@ -164,7 +217,7 @@ class _BreakdownRow extends StatelessWidget {
             borderRadius: BorderRadius.circular(6),
             child: LinearProgressIndicator(
               value: fraction,
-              minHeight: 6,
+              minHeight: 7,
               backgroundColor: style.soft,
               color: style.color,
             ),

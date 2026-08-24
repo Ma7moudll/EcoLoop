@@ -4,15 +4,16 @@ import 'package:flutter/material.dart';
 /// deep green, emerald, soft green backgrounds, white cards, dark text, blue
 /// AI accent, yellow + orange for status.
 abstract final class AppColors {
-  static const background = Color(0xFFEDF4F0);
-  static const appSurface = Color(0xFFF8FBF9);
+  static const background = Color(0xFFF5F5F9);
+  static const appSurface = Color(0xFFF5F5F9);
   static const foreground = Color(0xFF0B2925);
-  static const green = Color(0xFF079548);
+  static const green = Color(0xFF109581);
   static const deepGreen = Color(0xFF003D31);
+  static const scannerDark = Color(0xFF0E1F17);
   static const mint = Color(0xFFE9F7EF);
-  static const line = Color(0xFFDCE9E2);
+  static const line = Color(0xFFE3E6EC);
   static const muted = Color(0xFF6C7E79);
-  static const yellow = Color(0xFFF4AD17);
+  static const yellow = Color(0xFFF0C808);
   static const blue = Color(0xFF2B81DC);
   static const orange = Color(0xFFE8590C);
   static const danger = Color(0xFFB43F37);

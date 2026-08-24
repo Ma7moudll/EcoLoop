@@ -53,7 +53,7 @@ void main() {
     await tester.pumpWidget(_harness(repo, channel));
     await tester.pump(); // session creates capture-first, then camera classifies
 
-    expect(find.text('Analyzing the item…'), findsOneWidget);
+    expect(find.text('Analyzing...'), findsOneWidget);
 
     await tester.pump(const Duration(milliseconds: 60));
     expect(find.text('Routing the item…'), findsOneWidget);
@@ -65,8 +65,8 @@ void main() {
 
     await tester.pumpAndSettle();
     expect(find.byType(DepositResultScreen), findsOneWidget);
-    expect(find.text('Deposit complete!'), findsOneWidget);
-    expect(find.textContaining('+5 pts'), findsOneWidget);
+    expect(find.text('Success! 🎉'), findsOneWidget);
+    expect(find.textContaining('+5 POINTS'), findsOneWidget);
   });
 
   testWidgets('gate rejection surfaces an error, never a success', (tester) async {
