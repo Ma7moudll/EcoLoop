@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import uuid
 
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
@@ -9,8 +10,14 @@ from sqlalchemy.orm import Session
 from ..config import settings
 from ..database import get_db
 from ..models import User
+from ..models.auth_token import hash_token
 from ..mqtt import RuntimePublisher
-from ..schemas import CallbackEvent, CreateSessionRequest
+from ..schemas import (
+    CallbackEvent,
+    ClaimSessionRequest,
+    CreateSessionRequest,
+    HandoffTokenResponse,
+)
 from ..security import get_current_user
 from ..services import DepositService
 from ..services.ai_client import AiGateRejection, AiWireError
@@ -21,6 +28,120 @@ logger = logging.getLogger("recycle.deposit")
 router = APIRouter(prefix="/deposit", tags=["deposit"])
 
 _publisher = RuntimePublisher()
+
+
+@router.post("/handoff-token", response_model=HandoffTokenResponse)
+def handoff_token(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> HandoffTokenResponse:
+    """Mints the student's short-lived deposit-handoff QR token.
+
+    The Ecolamp app renders `{token}` as a QR; the STATION tablet scans it and
+    exchanges it (authenticated with its station key) via
+    `POST /deposit/session/claim`. Single-use + short TTL => a scanned or
+    shoulder-surfed QR cannot be replayed, and no long-lived secret ever
+    enters the QR payload."""
+    from datetime import datetime, timedelta, timezone
+
+    from ..models.auth_token import AuthToken
+
+    ttl = settings.deposit_handoff_token_ttl_seconds
+    raw = uuid.uuid4().hex + uuid.uuid4().hex
+    db.add(
+        AuthToken(
+            id=AuthToken.new_id(),
+            user_id=user.id,
+            purpose="deposit_handoff",
+            token_hash=hash_token(raw),
+            expires_at=datetime.now(timezone.utc) + timedelta(seconds=ttl),
+        )
+    )
+    db.commit()
+    return HandoffTokenResponse(
+        token=raw,
+        expires_at=datetime.now(timezone.utc) + timedelta(seconds=ttl),
+    )
+
+
+@router.post("/session/claim")
+def claim_session(
+    payload: ClaimSessionRequest,
+    x_station_key: str = Header(default="", alias="X-Station-Key"),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Station-side claim of a student handoff QR (Ecolamp flow).
+
+    The station tablet — authenticated with `X-Station-Key`, the same trust
+    boundary as `/deposit/capture` — consumes the student's single-use
+    handoff token and creates a capture-first deposit session for that
+    student at this station. Atomically single-use: two concurrent scans of
+    the same QR cannot both succeed. Points are impossible here; only a
+    physical MQTT `deposit_result` can complete the deposit."""
+    if not x_station_key or x_station_key != settings.station_api_key:
+        return JSONResponse(status_code=401, content={"error": "Invalid station key"})
+
+    auth_token_record = _consume_handoff_token(db, payload.token)
+    if auth_token_record is None:
+        return JSONResponse(
+            status_code=422,
+            content={"code": "INVALID_HANDOFF_TOKEN",
+                     "error": "This QR code is invalid or has expired. Ask the student to refresh it."},
+        )
+
+    user = db.get(User, auth_token_record.user_id)
+    if user is None:
+        return JSONResponse(
+            status_code=422,
+            content={"code": "INVALID_HANDOFF_TOKEN", "error": "Unknown student account."},
+        )
+    try:
+        session = DepositService(_publisher).create_session(
+            db, user, prediction_id=None, station_id=payload.station_id
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return _wire_session(session)
+
+
+def _consume_handoff_token(db: Session, raw_token: str):
+    """Atomic single-use consumption of a deposit_handoff token."""
+    from datetime import datetime, timezone
+
+    from sqlalchemy import update as sa_update
+
+    from ..models.auth_token import AuthToken, hash_token
+
+    hashed = hash_token(raw_token)
+    now = datetime.now(timezone.utc)
+    record = (
+        db.query(AuthToken)
+        .filter(
+            AuthToken.token_hash == hashed,
+            AuthToken.purpose == "deposit_handoff",
+            AuthToken.used_at.is_(None),
+        )
+        .first()
+    )
+    if record is None:
+        return None
+    expires = record.expires_at
+    if expires.tzinfo is None:
+        expires = expires.replace(tzinfo=timezone.utc)
+    if expires < now:
+        return None
+    result = db.execute(
+        sa_update(AuthToken)
+        .where(AuthToken.id == record.id, AuthToken.used_at.is_(None))
+        .values(used_at=now)
+        .returning(AuthToken.id)
+    )
+    winner = result.fetchone()
+    db.commit()
+    if winner is None:
+        return None
+    db.refresh(record)
+    return record
 
 
 @router.post("/session")
@@ -92,6 +213,39 @@ def capture(
         return JSONResponse(status_code=503, content={"code": "AI_UNAVAILABLE", "error": str(exc)})
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.get("/active")
+def active_deposit(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """The caller's current NON-TERMINAL deposit session, if any.
+
+    Used by the student app after a station claims its handoff QR: the phone
+    does not receive the claim response, so it polls here until the session
+    created by `POST /deposit/session/claim` shows up."""
+    from sqlalchemy import select
+
+    from ..models import DepositSession
+    from ..services.deposit_service import TERMINAL
+
+    row = (
+        db.execute(
+            select(DepositSession)
+            .where(
+                DepositSession.user_id == user.id,
+                DepositSession.status.notin_(TERMINAL),
+            )
+            .order_by(DepositSession.created_at.desc())
+            .limit(1)
+        )
+        .scalars()
+        .first()
+    )
+    if row is None:
+        return JSONResponse(status_code=404, content={"error": "No active deposit."})
+    return {"deposit": _wire_session(row)}
 
 
 @router.get("/{operation_id}")

@@ -57,9 +57,20 @@ backend validates:
 ```
 
 `status` is the machine's belief. The backend **independently** checks
-position, weight, stability, beam, mechanical confirmation and carriage
+position, weight, stability, beam, mechanical confirmation and mechanism
 position — a machine can report `confirmed` and still be rejected (e.g. it
 physically landed in compartment 2 while the backend routed to 1).
+
+## Mechanism neutrality (Carriage V1 ⇄ Rotary V2)
+
+> **Carriage and Rotary are alternative hardware implementations of the same
+> station-level software contract.**
+
+Commands express compartment intent (`destination_position`) — never
+mechanics. Terminal events report position via the mechanism-neutral
+`mechanism_position` field (V1 firmware may keep publishing
+`carriage_position`; the backend accepts both interchangeably). Mechanical
+vocabulary lives exclusively inside each unit's controller/firmware.
 
 ## Machine states
 

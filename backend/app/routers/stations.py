@@ -22,9 +22,16 @@ def _wire(station: Station, snapshot=None) -> dict:
         "station_code": station.station_code,
         "name": station.name,
         "status": live.status if live else station.status,
+        # Which sorting mechanism the unit runs (`carriage` V1 | `rotary` V2).
+        # Metadata for ops/admin; the student UI and commands never branch on
+        # it — both mechanisms speak the same command/event contract.
+        "mechanism": getattr(station, "mechanism", None) or "carriage",
     }
     if live is not None:
-        base["carriage_position"] = live.carriage_position
+        # Mechanism-neutral position telemetry. (V1 firmware reports the
+        # carriage position over MQTT; the domain API exposes only the
+        # abstract compartment index.)
+        base["mechanism_position"] = live.carriage_position
         base["state"] = live.state
         base["weight_grams"] = round(live.weight_grams, 2)
         base["beam_broken"] = live.beam_broken
@@ -71,7 +78,7 @@ def station_status(
             "station_code": station.station_code,
             "status": station.status,
             "state": "UNKNOWN",
-            "carriage_position": 0,
+            "mechanism_position": 0,
             "last_seen": None,
         }
     return snapshot.to_dict()

@@ -34,7 +34,8 @@ class DepositPlan:
     final_weight: float | None = None  # overrides final reading (underweight)
     beam_seen: bool = True
     mechanical_confirmed: bool = True
-    jam_at_step: int | None = None
+    jam_at_step: int | None = None      # V1 carriage: 1-based step index
+    jam_angle: float | None = None      # V2 rotary: chute angle that jams
     delay_before_terminal: float = 0.0
     duplicate_terminal: bool = False
     emit_machine_status: str = "confirmed"  # what the machine believes happened
@@ -62,6 +63,16 @@ SCENARIOS: dict[str, DepositPlan] = {
     "timeout": DepositPlan(name="timeout", delay_before_terminal=320.0),
     "duplicate": DepositPlan(name="duplicate", duplicate_terminal=True),
 }
+
+
+# V2 rotary variants — same backend outcomes as their V1 counterparts.
+SCENARIOS["rotary-jam"] = DepositPlan(
+    name="rotary-jam",
+    destination_position=2,  # force a real chute rotation so it can jam
+    jam_angle=45.0,
+    emit_machine_status="jam",
+)
+SCENARIOS["rotary-valid-metal"] = DepositPlan(name="rotary-valid-metal")
 
 
 def get_scenario(name: str) -> DepositPlan:

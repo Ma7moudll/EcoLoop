@@ -8,7 +8,8 @@
 ///   class; no duplicate `material` concept exists.
 /// - Confidence policy: exact thresholds 0.80 / 0.50 → HIGH / MEDIUM / LOW.
 /// - Routing policy: the EcoLoop station is ONE unit with four internal
-///   compartments (Blue/Yellow/Green/Grey) and a moving carriage. Routing maps
+///   compartments (Blue/Yellow/Green/Grey) served by a movable mechanism
+///   (carriage V1 / rotary chute V2). Routing maps
 ///   a predicted class → internal compartment position (1..4).
 /// - Typed models: `AppUser`, `Prediction`, `Station`, `Deposit`,
 ///   `WasteHistoryEvent`, `Impact`, `LeaderEntry`, `Challenge`.

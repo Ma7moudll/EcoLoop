@@ -127,6 +127,11 @@ class Settings(BaseSettings):
     smtp_from: str = "noreply@ecoloop.local"
     password_reset_token_ttl_seconds: int = 30 * 60
     email_verification_token_ttl_seconds: int = 24 * 60 * 60
+
+    # Student handoff QR: the student app displays a short-lived single-use
+    # token; the station tablet scans it and claims the deposit session with
+    # its station key. Short TTL + single use => non-replayable.
+    deposit_handoff_token_ttl_seconds: int = 120
     # When true, unverified accounts are refused at login. Requires a real
     # delivery path (SMTP): the console provider only logs the link server-side,
     # so gating login with it would lock every new user out permanently.

@@ -36,7 +36,12 @@ class StationSnapshot:
         }
 
     def to_dict(self) -> dict:
-        return asdict(self)
+        data = asdict(self)
+        # Mechanism-neutral wire name: the generic API must not expose
+        # carriage/motor vocabulary (V1 vs V2 implementation detail).
+        if "carriage_position" in data:
+            data["mechanism_position"] = data.pop("carriage_position")
+        return data
 
 
 class StationRegistry:

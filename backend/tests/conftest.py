@@ -160,16 +160,22 @@ def metal_prediction(client, demo_session, monkeypatch) -> dict:
 
 
 def confirm_event(operation_id: str, *, status="confirmed", position=1, weight=18.4,
-                  stable=True, beam=True, mech=True, carriage=1, station=STATION_ID) -> dict:
-    return {
+                  stable=True, beam=True, mech=True, carriage=1, station=STATION_ID,
+                  extra_fields=None) -> dict:
+    event = {
         "station_id": station,
         "operation_id": operation_id,
         "event": "deposit_result",
         "status": status,
         "actual_position": position,
+        # V1 carriage firmware reports `carriage_position`; V2 rotary firmware
+        # reports the mechanism-neutral `mechanism_position` (see test_rotary_v2).
         "carriage_position": carriage,
         "weight_grams": weight,
         "weight_stable": stable,
         "beam_event_seen": beam,
         "mechanical_confirmed": mech,
     }
+    if extra_fields:
+        event.update(extra_fields)
+    return event

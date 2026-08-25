@@ -58,7 +58,7 @@ _STATUS_RANK = {
 _MACHINE_REASONS = {
     "wrong_position": "the item did not reach the expected compartment",
     "underweight": "the recorded weight was below the minimum",
-    "jam": "the carriage jammed",
+    "jam": "the sorting mechanism jammed",
     "timeout": "the operation timed out",
     "sensor_error": "a sensor reported an error",
 }
@@ -408,7 +408,13 @@ class DepositService:
         weight_stable = bool(event.get("weight_stable", False))
         beam_seen = bool(event.get("beam_event_seen", False))
         mechanical = bool(event.get("mechanical_confirmed", False))
-        carriage_position = int(event.get("carriage_position") or 0)
+        # Mechanism-neutral position report. V1 (carriage) firmware publishes
+        # `carriage_position`; V2 (rotary) publishes `mechanism_position`.
+        # Both mean "the abstract mechanism's current compartment index".
+        mechanism_pos = event.get("mechanism_position")
+        if mechanism_pos is None:
+            mechanism_pos = event.get("carriage_position")
+        carriage_position = int(mechanism_pos or 0)
 
         reason = self._physical_failure(
             session, claimed_status, actual_position, weight, weight_stable,
@@ -515,7 +521,7 @@ class DepositService:
         if not mechanical:
             return "no mechanical confirmation"
         if carriage_position != actual_position:
-            return f"carriage not at deposit position ({carriage_position})"
+            return f"mechanism not at deposit position ({carriage_position})"
         return None
 
 

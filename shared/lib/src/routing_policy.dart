@@ -1,7 +1,8 @@
 /// Routing / compartment policy for the single EcoLoop station.
 ///
 /// The station is ONE physical unit with four internal compartments and an
-/// internal moving carriage. There is no "one bin per material", so routing
+/// movable sorting mechanism (carriage V1 / rotary V2). There is no "one bin
+/// per material", so routing
 /// is a pure function from the AI's `predicted_class` to an internal
 /// compartment position (1..4). This mapping is intentionally separate from
 /// the AI provider.

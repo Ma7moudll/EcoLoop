@@ -47,6 +47,28 @@ test-only classifier — never the default).
 | GET | `/deposit/{operation_id}` | — | live status (polling path) |
 | POST | `/deposit/{operation_id}/cancel` | — | allowed during any live phase (`capture`…`measuring`); blocked once terminal |
 | POST | `/deposit/callback/event` | `CallbackEvent` + header `X-Station-Key` | HTTP parity path for hardware events; **requires the same station key as `/deposit/capture`** so a random caller cannot fabricate a `deposit_result` and award themselves points (MQTT remains the primary path, broker-internal) |
+| POST | `/deposit/handoff-token` | — (student JWT) | Mints a **short-lived, single-use** deposit-handoff token (`{token, expires_at}`, ~120 s TTL, only its hash stored). The Ecolamp app renders it as the student's dynamic QR |
+| POST | `/deposit/session/claim` | `{token, station_id}` + header `X-Station-Key` | **Station tablet claims the scanned student QR**: atomically consumes the single-use token and creates a capture-first deposit session for that student at that station. Returns the standard deposit wire shape (`status: "capture"`) |
+| GET | `/deposit/active` | — (student JWT) | The caller's current non-terminal deposit session (`{deposit}`) or `404`. The phone polls this after handing off — it never sees the claim response |
+
+### QR reconciliation (Ecolamp flow)
+
+Two identification directions exist across the product family:
+
+- *Recycle Vision app*: the **phone scans the station** QR.
+- *Ecolamp app*: the **station tablet scans the student's** short-lived
+  handoff QR (`ECOLOOP:HANDOFF:<single-use token>`).
+
+Both converge on the same backend session pipeline. No long-lived secret ever
+enters a QR payload: the handoff token is single-use (atomic
+UPDATE-guarded), expires in ~120 s, and is worthless without the station's
+`X-Station-Key`.
+
+### Station mechanism metadata
+
+`GET /stations` items include `"mechanism": "carriage" | "rotary"` and expose
+mechanism-neutral telemetry (`mechanism_position`). Carriage vs rotary is an
+implementation detail of the unit; commands express compartment intent only.
 
 Deposit wire shape — `status` is `capture`/`analyzing` (station-camera capture
 phase), `pending`, a live phase (`routing`, `moving`, `ready`, `detecting`,

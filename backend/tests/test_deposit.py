@@ -212,12 +212,25 @@ def test_no_mechanical_confirmation_rejected(client, auth, plastic_prediction):
     assert "mechanical" in result["reject_reason"]
 
 
-def test_carriage_not_at_position_rejected(client, auth, plastic_prediction):
+def test_mechanism_not_at_position_rejected(client, auth, plastic_prediction):
+    """The mechanism (carriage V1 / rotary chute V2) must report that it is
+    physically at the routed compartment — otherwise the deposit rejects."""
     session = create_session(client, auth, plastic_prediction)
     code, result = complete(client, session["operation_id"],
                             position=1, weight=18.4, stable=True, beam=True, mech=True, carriage=3)
     assert result["status"] == "rejected"
-    assert "carriage" in result["reject_reason"]
+    assert "mechanism not at deposit position" in result["reject_reason"]
+
+
+def test_rotary_v2_neutral_position_field_accepted(client, auth, plastic_prediction):
+    """V2 rotary firmware publishes the mechanism-neutral field name; the
+    backend validates it exactly like V1's carriage_position."""
+    session = create_session(client, auth, plastic_prediction)
+    code, result = complete(client, session["operation_id"],
+                            position=1, weight=18.4, stable=True, beam=True,
+                            mech=True, extra_fields={"mechanism_position": 1})
+    assert result["status"] == "confirmed", result
+    assert result["points_awarded"] > 0
 
 
 def test_machine_reported_failure_rejected(client, auth, plastic_prediction):

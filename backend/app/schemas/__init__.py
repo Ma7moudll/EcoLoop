@@ -72,6 +72,27 @@ class CancelRequest(BaseModel):
     operation_id: str
 
 
+class HandoffTokenResponse(BaseModel):
+    """Short-lived single-use token the student app renders as a QR code.
+
+    The station tablet scans it and exchanges it (with its station key) via
+    `POST /deposit/session/claim`. The raw token is never stored server-side
+    (only its hash) and can be consumed exactly once."""
+
+    token: str
+    expires_at: datetime
+
+
+class ClaimSessionRequest(BaseModel):
+    """Station -> backend claim of a student handoff QR.
+
+    Requires the `X-Station-Key` header; creates a capture-first deposit
+    session for the student encoded in the single-use token."""
+
+    token: str = Field(min_length=16, max_length=128)
+    station_id: str = "st-001"
+
+
 class DepositCreatedResponse(BaseModel):
     deposit: dict[str, Any]
 
@@ -95,7 +116,11 @@ class CallbackEvent(BaseModel):
     event: str = "deposit_result"
     status: str = "confirmed"
     actual_position: int = 0
+    # Mechanism position: V1 (carriage) firmware sends `carriage_position`;
+    # V2 (rotary) firmware sends `mechanism_position`. At least one is
+    # required — the backend validates whichever the unit publishes.
     carriage_position: int = 0
+    mechanism_position: int | None = None
     weight_grams: float = 0.0
     weight_stable: bool = False
     beam_event_seen: bool = False

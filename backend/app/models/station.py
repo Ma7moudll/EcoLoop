@@ -21,6 +21,10 @@ class Station(Base):
     station_code: Mapped[str] = mapped_column(String(32), unique=True, nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="offline")
+    # Which mechanical implementation the unit runs. Domain-level metadata
+    # only — commands express compartment intent (`destination_position`),
+    # never mechanics. `carriage` (V1) | `rotary` (V2).
+    mechanism: Mapped[str] = mapped_column(String(16), nullable=False, default="carriage")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
