@@ -5,6 +5,7 @@ import 'package:shared/shared.dart';
 import '../../core/app_theme.dart';
 import '../../core/formatters.dart';
 import '../../providers/data_providers.dart';
+import '../../widgets/brand_app_bar.dart';
 import '../../widgets/class_style.dart';
 import '../../widgets/gamification_cards.dart';
 import '../../widgets/state_views.dart';
@@ -18,15 +19,7 @@ class ImpactScreen extends ConsumerWidget {
     final impactAsync = ref.watch(impactProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        title: const Text(
-          'My Impact',
-          style: TextStyle(fontWeight: FontWeight.w800),
-        ),
-      ),
+      appBar: const BrandAppBar(),
       body: impactAsync.when(
         loading: () => const LoadingView(message: 'Loading your impact…'),
         error: (e, _) => ErrorView(

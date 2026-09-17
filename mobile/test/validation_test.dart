@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:recycle_vision/services/data_repository.dart';
+import 'package:ecoloop/services/data_repository.dart';
 
 void main() {
   group('Validation', () {

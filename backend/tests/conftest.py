@@ -31,7 +31,7 @@ from app.services.ai_client import AiExternalPrediction  # noqa: E402
 from app.services.predict_service import PredictService  # noqa: E402
 from app.services.seed import seed  # noqa: E402
 
-DEMO_EMAIL = "demo@recycle.vision"
+DEMO_EMAIL = "demo@ecoloop.app"
 DEMO_PASSWORD = "demo123"
 STATION_ID = "st-001"
 STATION_CODE = "ST-001"
@@ -160,7 +160,7 @@ def metal_prediction(client, demo_session, monkeypatch) -> dict:
 
 
 def confirm_event(operation_id: str, *, status="confirmed", position=1, weight=18.4,
-                  stable=True, beam=True, mech=True, carriage=1, station=STATION_ID,
+                  stable=True, beam=True, mech=True, mech_position=1, station=STATION_ID,
                   extra_fields=None) -> dict:
     event = {
         "station_id": station,
@@ -168,9 +168,8 @@ def confirm_event(operation_id: str, *, status="confirmed", position=1, weight=1
         "event": "deposit_result",
         "status": status,
         "actual_position": position,
-        # V1 carriage firmware reports `carriage_position`; V2 rotary firmware
-        # reports the mechanism-neutral `mechanism_position` (see test_rotary_v2).
-        "carriage_position": carriage,
+        # Rotary firmware reports the compartment index the chute aligns with.
+        "mechanism_position": mech_position,
         "weight_grams": weight,
         "weight_stable": stable,
         "beam_event_seen": beam,

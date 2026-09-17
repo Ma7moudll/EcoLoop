@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     )
 
     # -- API -----------------------------------------------------------------
-    app_name: str = "Recycle Vision API"
+    app_name: str = "EcoLoop API"
     api_v1_prefix: str = "/api/v1"
     debug: bool = False
     # development | production. Production enables the startup secret guard,
@@ -65,7 +65,7 @@ class Settings(BaseSettings):
     allowed_origins: str = "http://localhost:3000,http://localhost:8080"
 
     # -- Database ------------------------------------------------------------
-    database_url: str = "postgresql+psycopg2://recycle:recycle@localhost:5432/recycle_vision"
+    database_url: str = "postgresql+psycopg2://ecoloop:ecoloop@localhost:5432/ecoloop"
 
     # -- AI service ----------------------------------------------------------
     ai_service_url: str = "http://localhost:8051"
@@ -112,7 +112,7 @@ class Settings(BaseSettings):
     # -- Seed data -----------------------------------------------------------
     seed_on_startup: bool = True
     # When true, `seed()` also creates the well-known dev/test account
-    # (`demo@recycle.vision` / `demo123`, 45 pts). Default OFF so the runtime
+    # (`demo@ecoloop.app` / `demo123`, 45 pts). Default OFF so the runtime
     # DB contains no demo users; test suites and the software E2E opt in.
     seed_demo_user: bool = False
 

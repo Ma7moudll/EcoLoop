@@ -1,4 +1,4 @@
-# Recycle Vision — Architecture
+# EcoLoop — Architecture
 
 A real, end-to-end recycling-donation system. The Flutter app talks to a
 FastAPI backend; the backend owns all business rules and point-awarding. A
@@ -24,7 +24,7 @@ hardware.
         │ deposit_result               │ (command topic)
 ┌──────────────────────────────┐   ┌──────────────────────────────┐
 │  Hardware simulator (ESP32)  │   │  Station camera              │
-│  carriage · load cell · IR   │   │  ──POST /deposit/capture──▶  backend
+│  rotary chute · load cell · IR │   │  ──POST /deposit/capture──▶  backend
 │  beam · position · machine   │   │  (FINAL classification       │
 └──────────────────────────────┘   │   source; phone never snaps) │
                                    └──────────────────────────────┘
@@ -75,7 +75,7 @@ the phone only identifies the station (QR / code / list) and watches status:
    - Otherwise, per the confidence policy, the backend publishes the MQTT
      `route` command (HIGH auto / MEDIUM manual). **The capture endpoint can
      never award points.**
-3. The station (simulator/firmware) executes the deposit: moves the carriage,
+3. The station (simulator/firmware) executes the deposit: rotates the chute to
    reads the load cell, crosses the IR beam, and publishes a terminal
    `deposit_result` event.
 4. Backend MQTT handler calls `DepositService.complete_from_event` which applies
@@ -85,7 +85,7 @@ the phone only identifies the station (QR / code / list) and watches status:
    - claimed status `confirmed`
    - `actual_position` == routed position
    - weight ≥ `min_deposit_weight_grams` · `weight_stable`
-   - `beam_event_seen` · `mechanical_confirmed` · carriage at position
+   - `beam_event_seen` · `mechanical_confirmed` · chute at position
 5. If all gates pass, one `BEGIN … COMMIT` transaction (in
    `points_transaction.award_points`) inserts the `waste_event`, updates the
    user's points, upserts student + faculty leaderboard rows, and marks the

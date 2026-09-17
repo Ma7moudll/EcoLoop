@@ -49,7 +49,7 @@ def user_balance_delta(operation_id: str, predicted: int) -> int:
 
 def _create_and_get_user_id(client, demo_session):
     with SessionLocal() as db:
-        return db.query(User).filter(User.email == "demo@recycle.vision").first().id
+        return db.query(User).filter(User.email == "demo@ecoloop.app").first().id
 
 
 # --------------------------------------------------------------------------
@@ -140,7 +140,7 @@ def test_valid_deposit_awards_points_once(client, auth, plastic_prediction):
     session = create_session(client, auth, plastic_prediction)
 
     code, result = complete(client, session["operation_id"],
-                            position=1, weight=18.4, stable=True, beam=True, mech=True, carriage=1)
+                            position=1, weight=18.4, stable=True, beam=True, mech=True, mech_position=1)
     assert code == 200, result
     assert result["status"] == "confirmed"
     assert result["points_awarded"] == 5
@@ -162,8 +162,8 @@ def test_valid_deposit_awards_points_once(client, auth, plastic_prediction):
 
 def test_duplicate_event_rejected_409(client, auth, plastic_prediction):
     session = create_session(client, auth, plastic_prediction)
-    complete(client, session["operation_id"], position=1, weight=18.4, stable=True, beam=True, mech=True, carriage=1)
-    code, result = complete(client, session["operation_id"], position=1, weight=18.4, stable=True, beam=True, mech=True, carriage=1)
+    complete(client, session["operation_id"], position=1, weight=18.4, stable=True, beam=True, mech=True, mech_position=1)
+    code, result = complete(client, session["operation_id"], position=1, weight=18.4, stable=True, beam=True, mech=True, mech_position=1)
     assert code == 409
     assert "already" in result["error"]
 
@@ -173,7 +173,7 @@ def test_wrong_position_rejected(client, auth, plastic_prediction):
     before = user_points(user_id)
     session = create_session(client, auth, plastic_prediction)
     code, result = complete(client, session["operation_id"],
-                            position=2, weight=18.4, stable=True, beam=True, mech=True, carriage=2)
+                            position=2, weight=18.4, stable=True, beam=True, mech=True, mech_position=2)
     assert code == 200
     assert result["status"] == "rejected"
     assert "wrong_position" in result["reject_reason"]
@@ -183,7 +183,7 @@ def test_wrong_position_rejected(client, auth, plastic_prediction):
 def test_underweight_rejected(client, auth, plastic_prediction):
     session = create_session(client, auth, plastic_prediction)
     code, result = complete(client, session["operation_id"],
-                            position=1, weight=0.5, stable=True, beam=True, mech=True, carriage=1)
+                            position=1, weight=0.5, stable=True, beam=True, mech=True, mech_position=1)
     assert result["status"] == "rejected"
     assert "underweight" in result["reject_reason"]
 
@@ -191,7 +191,7 @@ def test_underweight_rejected(client, auth, plastic_prediction):
 def test_unstable_weight_rejected(client, auth, plastic_prediction):
     session = create_session(client, auth, plastic_prediction)
     code, result = complete(client, session["operation_id"],
-                            position=1, weight=18.4, stable=False, beam=True, mech=True, carriage=1)
+                            position=1, weight=18.4, stable=False, beam=True, mech=True, mech_position=1)
     assert result["status"] == "rejected"
     assert "stable" in result["reject_reason"]
 
@@ -199,7 +199,7 @@ def test_unstable_weight_rejected(client, auth, plastic_prediction):
 def test_no_beam_event_rejected(client, auth, plastic_prediction):
     session = create_session(client, auth, plastic_prediction)
     code, result = complete(client, session["operation_id"],
-                            position=1, weight=18.4, stable=True, beam=False, mech=True, carriage=1)
+                            position=1, weight=18.4, stable=True, beam=False, mech=True, mech_position=1)
     assert result["status"] == "rejected"
     assert "beam" in result["reject_reason"]
 
@@ -207,36 +207,40 @@ def test_no_beam_event_rejected(client, auth, plastic_prediction):
 def test_no_mechanical_confirmation_rejected(client, auth, plastic_prediction):
     session = create_session(client, auth, plastic_prediction)
     code, result = complete(client, session["operation_id"],
-                            position=1, weight=18.4, stable=True, beam=True, mech=False, carriage=1)
+                            position=1, weight=18.4, stable=True, beam=True, mech=False, mech_position=1)
     assert result["status"] == "rejected"
     assert "mechanical" in result["reject_reason"]
 
 
 def test_mechanism_not_at_position_rejected(client, auth, plastic_prediction):
-    """The mechanism (carriage V1 / rotary chute V2) must report that it is
-    physically at the routed compartment — otherwise the deposit rejects."""
+    """The rotary mechanism must report that it is physically aligned with
+    the routed compartment — otherwise the deposit rejects."""
     session = create_session(client, auth, plastic_prediction)
     code, result = complete(client, session["operation_id"],
-                            position=1, weight=18.4, stable=True, beam=True, mech=True, carriage=3)
+                            position=1, weight=18.4, stable=True, beam=True, mech=True, mech_position=3)
     assert result["status"] == "rejected"
     assert "mechanism not at deposit position" in result["reject_reason"]
 
 
-def test_rotary_v2_neutral_position_field_accepted(client, auth, plastic_prediction):
-    """V2 rotary firmware publishes the mechanism-neutral field name; the
-    backend validates it exactly like V1's carriage_position."""
+def test_legacy_carriage_alias_not_accepted(client, auth, plastic_prediction):
+    """EcoLoop is rotary-only: the legacy V1 `carriage_position` field is not
+    part of the contract — a payload carrying only it cannot confirm a deposit."""
     session = create_session(client, auth, plastic_prediction)
-    code, result = complete(client, session["operation_id"],
-                            position=1, weight=18.4, stable=True, beam=True,
-                            mech=True, extra_fields={"mechanism_position": 1})
-    assert result["status"] == "confirmed", result
-    assert result["points_awarded"] > 0
+    event = confirm_event(session["operation_id"], position=1, weight=18.4,
+                          stable=True, beam=True, mech=True, mech_position=0,
+                          extra_fields={"carriage_position": 1})
+    event.pop("mechanism_position")
+    r = client.post("/api/v1/deposit/callback/event",
+                    headers={"X-Station-Key": "dev-station-key"}, json=event)
+    result = r.json()
+    assert result["status"] == "rejected", result
+    assert "mechanism not at deposit position" in result["reject_reason"]
 
 
 def test_machine_reported_failure_rejected(client, auth, plastic_prediction):
     session = create_session(client, auth, plastic_prediction)
     code, result = complete(client, session["operation_id"],
-                            status="jam", position=1, weight=0.0, stable=False, beam=False, mech=False, carriage=1)
+                            status="jam", position=1, weight=0.0, stable=False, beam=False, mech=False, mech_position=1)
     assert result["status"] == "rejected"
     assert "jam" in result["reject_reason"]
 
@@ -244,13 +248,13 @@ def test_machine_reported_failure_rejected(client, auth, plastic_prediction):
 def test_station_mismatch_rejected(client, auth, plastic_prediction):
     session = create_session(client, auth, plastic_prediction)
     code, result = complete(client, session["operation_id"], station="ST-ORPHAN",
-                            position=1, weight=18.4, stable=True, beam=True, mech=True, carriage=1)
+                            position=1, weight=18.4, stable=True, beam=True, mech=True, mech_position=1)
     assert result["status"] == "rejected"
     assert "station" in result["reject_reason"]
 
 
 def test_unknown_operation_rejected(client):
-    code, result = complete(client, "OP-20990101-999999", position=1, weight=18.4, stable=True, beam=True, mech=True, carriage=1)
+    code, result = complete(client, "OP-20990101-999999", position=1, weight=18.4, stable=True, beam=True, mech=True, mech_position=1)
     assert code == 404
 
 
@@ -261,7 +265,7 @@ def test_expired_session_rejected(client, auth, plastic_prediction):
         s.expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
         db.commit()
     code, result = complete(client, session["operation_id"],
-                            position=1, weight=18.4, stable=True, beam=True, mech=True, carriage=1)
+                            position=1, weight=18.4, stable=True, beam=True, mech=True, mech_position=1)
     assert result["status"] == "expired"
     assert "expired" in result["reject_reason"]
     assert result["points_awarded"] == 0
@@ -277,7 +281,7 @@ def test_metal_awards_10_points(client, auth, metal_prediction):
     before = user_points(user_id)
     session = create_session(client, auth, metal_prediction)
     code, result = complete(client, session["operation_id"],
-                            position=2, weight=25.0, stable=True, beam=True, mech=True, carriage=2)
+                            position=2, weight=25.0, stable=True, beam=True, mech=True, mech_position=2)
     assert result["status"] == "confirmed"
     assert result["points_awarded"] == 10
     assert user_points(user_id) == before + 10
@@ -298,7 +302,7 @@ def test_cancel_pending_session(client, auth, plastic_prediction):
 
 def test_cancel_completed_deposit_rejected(client, auth, plastic_prediction):
     session = create_session(client, auth, plastic_prediction)
-    complete(client, session["operation_id"], position=1, weight=18.4, stable=True, beam=True, mech=True, carriage=1)
+    complete(client, session["operation_id"], position=1, weight=18.4, stable=True, beam=True, mech=True, mech_position=1)
     r = client.post(
         f"/api/v1/deposit/{session['operation_id']}/cancel", headers=auth
     )
@@ -365,7 +369,7 @@ def test_terminal_blocks_further_state_transitions(client, auth, plastic_predict
     _apply(svc, op, "MOVING")
 
     # terminal confirmed
-    code, result = complete(client, op, position=1, weight=18.4, stable=True, beam=True, mech=True, carriage=1)
+    code, result = complete(client, op, position=1, weight=18.4, stable=True, beam=True, mech=True, mech_position=1)
     assert result["status"] == "confirmed"
     assert _apply(svc, op, "MEASURING") is None
     with SessionLocal() as db:
@@ -391,7 +395,7 @@ def test_duplicate_terminal_never_double_awards(client, auth, plastic_prediction
     session = create_session(client, auth, plastic_prediction)
     op = session["operation_id"]
     for _ in range(2):
-        code, _ = complete(client, op, position=1, weight=18.4, stable=True, beam=True, mech=True, carriage=1)
+        code, _ = complete(client, op, position=1, weight=18.4, stable=True, beam=True, mech=True, mech_position=1)
         assert code in (200, 409)
     assert user_points(user_id) == before + 5, "duplicate terminal event must not double-award"
     with SessionLocal() as db:

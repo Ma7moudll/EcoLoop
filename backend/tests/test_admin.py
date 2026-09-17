@@ -9,7 +9,7 @@ from app.models import User
 from app.security import hash_password
 
 
-def _make_admin(email="admin@recycle.vision") -> None:
+def _make_admin(email="admin@ecoloop.app") -> None:
     with SessionLocal() as db:
         if db.query(User).filter(User.email == email).first() is None:
             db.add(
@@ -32,7 +32,7 @@ def admin_auth(client):
     _make_admin()
     r = client.post(
         "/api/v1/auth/login",
-        json={"email": "admin@recycle.vision", "password": "admin-pass-123"},
+        json={"email": "admin@ecoloop.app", "password": "admin-pass-123"},
     )
     assert r.status_code == 200, r.text
     return {"Authorization": f"Bearer {r.json()['token']}"}
@@ -70,9 +70,9 @@ def test_admin_can_create_and_patch_station(client, admin_auth):
 
 def test_admin_can_list_and_deactivate_user(client, admin_auth):
     users = client.get("/api/v1/admin/users", headers=admin_auth).json()["items"]
-    assert any(u["email"] == "demo@recycle.vision" for u in users)
+    assert any(u["email"] == "demo@ecoloop.app" for u in users)
 
-    target = next(u for u in users if u["email"] == "demo@recycle.vision")
+    target = next(u for u in users if u["email"] == "demo@ecoloop.app")
     r = client.patch(
         f"/api/v1/admin/users/{target['id']}",
         headers=admin_auth,
@@ -84,7 +84,7 @@ def test_admin_can_list_and_deactivate_user(client, admin_auth):
     # A deactivated user cannot log in.
     login = client.post(
         "/api/v1/auth/login",
-        json={"email": "demo@recycle.vision", "password": "demo123"},
+        json={"email": "demo@ecoloop.app", "password": "demo123"},
     )
     assert login.status_code == 403
 
@@ -192,7 +192,7 @@ def test_admin_users_search_filter_and_paging(client, admin_auth):
     assert len(body["items"]) <= 2 and body["total"] >= 3
 
     # Student codes and faculty display names are exposed for the directory.
-    r = client.get("/api/v1/admin/users?q=demo@recycle.vision", headers=admin_auth)
+    r = client.get("/api/v1/admin/users?q=demo@ecoloop.app", headers=admin_auth)
     demo = r.json()["items"][0]
     assert demo["student_code"]
     assert demo["faculty_name"] == "Engineering"
@@ -203,7 +203,7 @@ def test_admin_console_shell_public_data_gated(client, auth, admin_auth):
     shell = client.get("/api/v1/admin/ui")
     assert shell.status_code == 200
     assert "EcoLoop Admin" in shell.text
-    assert "demo@recycle.vision" not in shell.text
+    assert "demo@ecoloop.app" not in shell.text
     # …but every DATA endpoint is locked down.
     assert client.get("/api/v1/admin/overview").status_code == 401
     assert client.get("/api/v1/admin/overview", headers=auth).status_code == 403
@@ -291,7 +291,7 @@ def test_admin_delete_user_history_guard_and_success(
     confirm_deposit(client, auth, plastic_prediction)
     demo = next(
         u for u in client.get("/api/v1/admin/users", headers=admin_auth).json()["items"]
-        if u["email"] == "demo@recycle.vision"
+        if u["email"] == "demo@ecoloop.app"
     )
     r = client.delete(f"/api/v1/admin/users/{demo['id']}", headers=admin_auth)
     assert r.status_code == 409

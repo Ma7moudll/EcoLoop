@@ -54,7 +54,7 @@ def test_ws_subscribes_and_delivers_state_and_terminal(client, demo_session, pla
         # A terminal deposit_result (as the MQTT handler would publish it).
         with SessionLocal() as db:
             result = DepositService(publisher=FakePublisher()).complete_from_event(
-                db, confirm_event(op, position=1, weight=18.4, stable=True, beam=True, mech=True, carriage=1)
+                db, confirm_event(op, position=1, weight=18.4, stable=True, beam=True, mech=True, mech_position=1)
             )
             event_bus.publish(op, {"type": "terminal", "deposit": result})
         msg = ws.receive_json()
@@ -87,7 +87,7 @@ def test_ws_does_not_deliver_other_operations(client, demo_session, plastic_pred
         # receive it.
         with SessionLocal() as db:
             result = DepositService(publisher=FakePublisher()).complete_from_event(
-                db, confirm_event(op_b, position=2, weight=25.0, stable=True, beam=True, mech=True, carriage=2)
+                db, confirm_event(op_b, position=2, weight=25.0, stable=True, beam=True, mech=True, mech_position=2)
             )
             event_bus.publish(op_b, {"type": "terminal", "deposit": result})
 

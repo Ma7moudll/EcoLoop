@@ -4,7 +4,7 @@
 > Two interchangeable physical sorting mechanisms.**
 
 Station V2 sorts waste into four fixed bins with a **single rotating chute**
-driven by a stepper motor. It implements the *existing* Recycle Vision
+driven by a stepper motor. It implements the *existing* EcoLoop
 station MQTT contract (`docs/mqtt-contract.md`) and reports
 `mechanism_position` — the backend, AI pipeline, and Ecolamp app are
 completely unaware of which mechanism is installed.

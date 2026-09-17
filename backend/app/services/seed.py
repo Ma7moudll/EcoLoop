@@ -43,7 +43,7 @@ def seed(db: Session, seed_demo_user: bool = False) -> None:
     Always creates the configuration the runtime needs: faculties, the station,
     the routing policy and the operation counter. When `seed_demo_user` is
     True it ALSO creates the well-known dev/test account
-    (`demo@recycle.vision` / `demo123`). Runtime stacks leave that OFF so no
+    (`demo@ecoloop.app` / `demo123`). Runtime stacks leave that OFF so no
     demo users exist in the real database; test suites and the software E2E
     opt in so their fixtures keep working.
     """
@@ -62,6 +62,7 @@ def seed(db: Session, seed_demo_user: bool = False) -> None:
         )
         db.flush()
 
+    if db.query(Station).first() is None:
         db.add_all(
             [
                 Station(
@@ -73,6 +74,7 @@ def seed(db: Session, seed_demo_user: bool = False) -> None:
             ]
         )
 
+    if db.query(RoutingPolicy).first() is None:
         routing = [
             ("plastic", 1, 5),
             ("metal", 2, 10),
@@ -92,7 +94,7 @@ def seed(db: Session, seed_demo_user: bool = False) -> None:
         db.add(
             User(
                 id="u-demo",
-                email="demo@recycle.vision",
+                email="demo@ecoloop.app",
                 student_code="S-DEMO1",
                 name="Demo Student",
                 password_hash=hash_password("demo123"),

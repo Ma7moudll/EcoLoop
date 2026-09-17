@@ -1,8 +1,9 @@
 # MQTT Contract
 
 Prefix: `ecoloop/stations` (configurable via `MQTT_TOPIC_PREFIX`).
-A single station = one physical unit with **four internal compartments**
-(positions `1..4`), an internal carriage, a load cell and an IR beam.
+A single station = one physical unit with **four fixed bins** arranged in a
+ring (positions `1..4`), a rotating chute (Rotary V2), a load cell and an IR
+beam.
 
 ## Topics
 
@@ -61,16 +62,13 @@ position, weight, stability, beam, mechanical confirmation and mechanism
 position — a machine can report `confirmed` and still be rejected (e.g. it
 physically landed in compartment 2 while the backend routed to 1).
 
-## Mechanism neutrality (Carriage V1 ⇄ Rotary V2)
-
-> **Carriage and Rotary are alternative hardware implementations of the same
-> station-level software contract.**
+## Mechanical abstraction
 
 Commands express compartment intent (`destination_position`) — never
-mechanics. Terminal events report position via the mechanism-neutral
-`mechanism_position` field (V1 firmware may keep publishing
-`carriage_position`; the backend accepts both interchangeably). Mechanical
-vocabulary lives exclusively inside each unit's controller/firmware.
+mechanics. Terminal events report position via the abstract
+`mechanism_position` field (the compartment index the chute currently aligns
+with). Mechanical vocabulary lives exclusively inside the unit's
+controller/firmware.
 
 ## Machine states
 
@@ -96,7 +94,7 @@ state change ever touches points.
    publishes `route` (automatic or manual). With `ai_prediction_id` (legacy
    path) `route` is published immediately.
 2. Simulator: `ROUTING`, `MOVING` (per-step `sensor` telemetry with
-   `carriage_position`), `POSITIONED`, `READY_FOR_DEPOSIT`.
+   `mechanism_position`), `POSITIONED`, `READY_FOR_DEPOSIT`.
 3. `DETECTING` (beam breaks), `MEASURING` (weight ramp, `weight_stable` at
    settle), beam clears.
 4. `DEPOSIT_CONFIRMED` → `deposit_result` terminal event → backend validates
@@ -108,8 +106,8 @@ state change ever touches points.
 | Scenario | Behavior | Backend outcome |
 |---|---|---|
 | `valid-plastic` | obey route, 18.4g stable, beam+mech OK | confirmed +5 |
-| `wrong-position` | carriage lands at compartment 2 (routed to 1) | rejected `wrong_position` |
+| `wrong-position` | chute aligns with compartment 2 (routed to 1) | rejected `wrong_position` |
 | `underweight` | only 0.5g | rejected `underweight` |
-| `jam` | carriage jams mid-move | rejected `jam` |
+| `jam` | chute jams mid-rotation | rejected `jam` |
 | `timeout` | terminal arrives after session expiry | rejected `expired` |
 | `duplicate` | two identical terminals | 1st confirmed, 2nd `409` |

@@ -1,4 +1,4 @@
-/// The four coarse waste classes recognized by Recycle Vision.
+/// The four coarse waste classes recognized by EcoLoop.
 ///
 /// This is the single source of truth for the detected waste class.
 /// The AI provider returns `predicted_class` and everything else derives

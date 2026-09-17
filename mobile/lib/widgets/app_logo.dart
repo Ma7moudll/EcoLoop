@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../core/app_theme.dart';
+import 'ecoloop_logo.dart';
 
-/// Recycle Vision brand mark (Recycle icon + wordmark).
+/// EcoLoop brand mark (loop icon + wordmark).
 class AppLogo extends StatelessWidget {
   final double size;
   final bool showWordmark;
@@ -14,7 +15,7 @@ class AppLogo extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(Icons.recycling, size: size, color: AppColors.green),
+        EcoLoopMark(size: size, color: AppColors.green),
         if (showWordmark)
           Padding(
             padding: const EdgeInsets.only(left: 7),
@@ -26,9 +27,9 @@ class AppLogo extends StatelessWidget {
                   color: AppColors.green,
                 ),
                 children: const [
-                  TextSpan(text: 'Recycle'),
+                  TextSpan(text: 'Eco'),
                   TextSpan(
-                    text: 'Vision',
+                    text: 'Loop',
                     style: TextStyle(color: AppColors.deepGreen),
                   ),
                 ],

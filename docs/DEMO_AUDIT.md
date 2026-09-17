@@ -60,7 +60,7 @@ every test suite green using its existing fixtures/mocks **internally**.
 | `mobile/lib/core/app_config.dart:45-46` | `offlineMode` compile-time flag | **A** — remove |
 | `mobile/lib/core/app_config.dart:58` | `simulatedWeightGrams` | **A** — only used by the offline fake; remove |
 | `mobile/lib/core/app_config.dart:52-54` | `minDepositWeightGrams` + comment | **A** — used only for demo UX copy; remove |
-| `mobile/lib/screens/login_screen.dart:61-69` | `_demoLogin()` + "Try the demo account" button (fills `demo@recycle.vision`/`demo123`) | **A** — remove button + handler |
+| `mobile/lib/screens/login_screen.dart:61-69` | `_demoLogin()` + "Try the demo account" button (fills `demo@ecoloop.app`/`demo123`) | **A** — remove button + handler |
 | `mobile/lib/screens/home_screen.dart:45-48` | `if (AppConfig.demoMode) DemoBadge()` | **A** — remove (badge only renders under demo mode) |
 | `mobile/lib/widgets/app_logo.dart:45` | `DemoBadge` widget | **A** — remove once home screen no longer uses it |
 | `mobile/lib/screens/settings_screen.dart:30-36` | read-only "Demo mode" `SwitchTile` bound to `AppConfig.demoMode` | **A** — remove the tile; keep honest status read-outs |
@@ -82,7 +82,7 @@ No mobile test asserts `DemoBadge`/`DEMO` text (checked `home_screen_test`,
 
 | File | What | Verdict |
 |---|---|---|
-| `backend/app/services/seed.py` | idempotent seed. Keeps faculties, `st-001`, routing policy, `OperationCounter`. Demo user (`Demo Student` / `demo@recycle.vision` / `demo123` / `points=45`) is now gated behind `seed_demo_user=True` | **A (resolved)** — default seed creates config only; demo user only via explicit `SEED_DEMO_USER=true` |
+| `backend/app/services/seed.py` | idempotent seed. Keeps faculties, `st-001`, routing policy, `OperationCounter`. Demo user (`Demo Student` / `demo@ecoloop.app` / `demo123` / `points=45`) is now gated behind `seed_demo_user=True` | **A (resolved)** — default seed creates config only; demo user only via explicit `SEED_DEMO_USER=true` |
 | `backend/app/main.py:40-42` | lifespan runs `seed()` + `LeaderboardService.repair()` when `SEED_ON_STARTUP` | keep — `repair()` rebuilds leaderboard from real `users`/`points` |
 | `backend/app/config.py` | `seed_on_startup: bool = True` (dev config seed); new `seed_demo_user: bool = False` gates the demo account | keep (dev convenience), re-audit prod |
 | `backend/tests/conftest.py` | `FakeAi`, `FakePublisher`, `SEED_ON_STARTUP=true`, clean schema per test, `DEMO_EMAIL`/`DEMO_PASSWORD` | **B** — keep; these are test fixtures |
@@ -90,8 +90,8 @@ No mobile test asserts `DemoBadge`/`DEMO` text (checked `home_screen_test`,
 | `backend/app/services/points_transaction.py`, `leaderboard_service.py`, `challenge_service.py`, `impact_service.py`, `predict_service.py`, `user_data.py`, `mqtt/*` | compute/award from real DB rows + real AI + real MQTT | keep (already real) |
 
 **Important interplay:** `backend/tests/conftest.py` seeds the demo user and
-logs in as `demo@recycle.vision` in every test, and `scripts/e2e_real_chain.py`
-expects `demo@recycle.vision` with `points=45`. If `seed()` stops creating the
+logs in as `demo@ecoloop.app` in every test, and `scripts/e2e_real_chain.py`
+expects `demo@ecoloop.app` with `points=45`. If `seed()` stops creating the
 demo user, the backend suite and the software E2E break. Resolution:
 - The **default runtime** seed must NOT create demo users → move demo-user
   creation behind an explicit opt-in env flag (e.g. `SEED_DEMO_USER=true`).
@@ -127,7 +127,7 @@ harness, **B**).
 ### 7. `server/` legacy Dart package — D (dormant)
 
 `server/` (shelf, JSON-file store) ships its own `seed.dart`
-(`demo@recycle.vision`/`demo123`, demo leaderboard, fake AI in `ai.dart`,
+(`demo@ecoloop.app`/`demo123`, demo leaderboard, fake AI in `ai.dart`,
 `DEMO_MODE` default `true`). It is **NOT** referenced by any script, doc, or
 `mobile/pubspec.yaml` (mobile depends only on `path: ../shared`). Classified
 **D**: dormant legacy, leave + document; never wire into the real stack.

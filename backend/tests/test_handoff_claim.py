@@ -166,7 +166,7 @@ def test_stations_expose_mechanism_and_neutral_position(client):
     items = r.json()["items"]
     assert items, "seeded stations expected"
     for st in items:
-        assert st["mechanism"] in ("carriage", "rotary")
+        assert st["mechanism"] == "rotary"
         assert "carriage_position" not in st
 
 

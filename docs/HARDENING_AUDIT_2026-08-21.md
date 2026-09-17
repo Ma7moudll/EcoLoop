@@ -1,7 +1,7 @@
 # EcoLoop Hardening Audit — Final Report
 
 **Date:** 2026-08-21 · **Scope:** full business-logic / auth / authz /
-mobile-UX / DB-integrity / admin-access audit of `recycle-vision`, with every
+mobile-UX / DB-integrity / admin-access audit of `ecoloop`, with every
 F-class finding fixed in place (no architecture rebuild, no demo/mock
 reintroduction, no security weakening).
 

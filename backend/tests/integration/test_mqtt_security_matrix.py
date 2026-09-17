@@ -90,7 +90,7 @@ def _valid_success_payload(operation_id: str) -> str:
         "event": "deposit_result",
         "status": "confirmed",
         "actual_position": 1,
-        "carriage_position": 1,
+        "mechanism_position": 1,
         "weight_grams": 50.0,
         "weight_stable": True,
         "beam_event_seen": True,
@@ -198,7 +198,7 @@ def test_forged_wrong_position_event_rejected(client, auth, pending_session, gat
     op = pending_session["operation_id"]
     forged = json.loads(_valid_success_payload(op))
     forged["actual_position"] = 3       # routed to 1
-    forged["carriage_position"] = 3
+    forged["mechanism_position"] = 3
     rc = mosquitto_pub(EVENT_TOPIC, json.dumps(forged), BROKER_USER, BROKER_PASS)
     assert rc == 0
 

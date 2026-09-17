@@ -1,4 +1,4 @@
-/// Typed domain models shared between the Recycle Vision app and backend.
+/// Typed domain models shared between the EcoLoop app and backend.
 ///
 /// The server is authoritative for points; these models are the contract.
 library;

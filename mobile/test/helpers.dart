@@ -1,8 +1,8 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:recycle_vision/core/api_client.dart';
-import 'package:recycle_vision/services/auth_repository.dart';
-import 'package:recycle_vision/services/data_repository.dart';
-import 'package:recycle_vision/services/deposit_status_channel.dart';
+import 'package:ecoloop/core/api_client.dart';
+import 'package:ecoloop/services/auth_repository.dart';
+import 'package:ecoloop/services/data_repository.dart';
+import 'package:ecoloop/services/deposit_status_channel.dart';
 import 'package:shared/shared.dart';
 
 /// No-op secure storage so auth fakes never touch platform channels.

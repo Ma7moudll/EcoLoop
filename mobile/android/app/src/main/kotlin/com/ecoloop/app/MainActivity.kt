@@ -1,4 +1,4 @@
-package com.ecoloop.recycle_vision
+package com.ecoloop.app
 
 import io.flutter.embedding.android.FlutterActivity
 

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Recycle Vision design tokens — preserves the original prototype's identity:
+/// EcoLoop design tokens — preserves the original prototype's identity:
 /// deep green, emerald, soft green backgrounds, white cards, dark text, blue
 /// AI accent, yellow + orange for status.
 abstract final class AppColors {
@@ -40,7 +40,7 @@ abstract final class AppRadii {
 }
 
 /// Loads the bundled Inter (primary) + Tajawal (Arabic) fonts and Material 3
-/// theme tuned to the Recycle Vision identity.
+/// theme tuned to the EcoLoop identity.
 ThemeData buildAppTheme() {
   final base = ThemeData(
     useMaterial3: true,

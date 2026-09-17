@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared/shared.dart';
 
 import '../core/app_theme.dart';
+import 'ecoloop_logo.dart';
 
 /// Hero card showing the user's current points and level.
 class PointsCard extends StatelessWidget {
@@ -27,10 +28,10 @@ class PointsCard extends StatelessWidget {
         children: [
           const Row(
             children: [
-              Icon(Icons.public, size: 13, color: AppColors.mint),
+              EcoLoopMark(size: 13, color: AppColors.mint),
               SizedBox(width: 6),
               Text(
-                'RECYCLE VISION',
+                'ECOLOOP',
                 style: TextStyle(
                   fontSize: 9,
                   letterSpacing: 1.2,

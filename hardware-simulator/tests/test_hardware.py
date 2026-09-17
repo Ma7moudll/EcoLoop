@@ -1,53 +1,73 @@
-"""Carriage, sensors, load cell and state machine unit tests."""
+"""Rotary chute, sensors, load cell and state machine unit tests."""
 from __future__ import annotations
 
 import pytest
 
 from hardware import (
     BeamSensor,
-    Carriage,
+    BinMap,
     IllegalTransition,
-    JamError,
     LoadCell,
     MachineState,
-    PositionSensor,
+    RotaryChute,
+    RotaryChuteConfig,
+    RotaryJamError,
     StateMachine,
     settle_profile,
 )
 
 
-# -- Carriage ------------------------------------------------------------------
+# -- BinMap ----------------------------------------------------------------------
 
-class TestCarriage:
-    def test_move_to_yields_each_intermediate_position(self):
-        c = Carriage(initial_position=1, movement_time_per_step=0)
-        positions = list(c.move_to(3))
-        assert positions == [2, 3]
-        assert c.current_position == 3
+class TestBinMap:
+    def test_target_for_each_position(self):
+        m = BinMap()
+        for pos, angle in ((1, 0.0), (2, 90.0), (3, 180.0), (4, 270.0)):
+            t = m.target_for_position(pos)
+            assert t.position == pos
+            assert t.angle_deg == angle
 
-    def test_move_backwards(self):
-        c = Carriage(initial_position=4, movement_time_per_step=0)
-        assert list(c.move_to(1)) == [3, 2, 1]
-        assert c.current_position == 1
+    def test_shortest_delta_takes_shortest_path(self):
+        m = BinMap()
+        assert m.shortest_delta(0.0, 90.0) == 90.0
+        assert m.shortest_delta(0.0, 270.0) == -90.0  # 270° CCW is shorter than CW
 
-    def test_no_move_when_already_at_target(self):
-        c = Carriage(initial_position=2, movement_time_per_step=0)
-        assert list(c.move_to(2)) == []
-        assert c.current_position == 2
 
-    def test_jam_raises_and_position_unchanged(self):
-        c = Carriage(initial_position=1, movement_time_per_step=0)
-        c.jam_at_step = 1
-        with pytest.raises(JamError):
-            list(c.move_to(3))
-        assert c.current_position == 1
+# -- Rotary chute ----------------------------------------------------------------
 
-    def test_jam_on_later_step(self):
-        c = Carriage(initial_position=1, movement_time_per_step=0)
-        c.jam_at_step = 2
-        with pytest.raises(JamError):
-            list(c.move_to(4))
-        assert c.current_position == 2  # jammed after the second step
+class TestRotaryChute:
+    def _chute(self) -> RotaryChute:
+        return RotaryChute(config=RotaryChuteConfig(rotation_time_per_90_deg=0.0))
+
+    def test_home_arrives_at_zero(self):
+        c = self._chute()
+        list(c.home())
+        assert c.mechanism_position() == 1
+
+    def test_route_to_position_reports_target(self):
+        c = self._chute()
+        list(c.home())
+        list(c.route_to_position(3))
+        assert c.mechanism_position() == 3
+
+    def test_route_takes_shortest_path(self):
+        c = self._chute()
+        list(c.home())
+        moved = list(c.route_to_position(4))
+        assert len(moved) > 0
+
+    def test_invalid_position_rejected(self):
+        c = self._chute()
+        list(c.home())
+        with pytest.raises(KeyError):
+            list(c.route_to_position(9))
+
+    def test_jam_raises_mid_rotation(self):
+        c = RotaryChute(config=RotaryChuteConfig(), jam_at_angle=45.0)
+        list(c.home())
+        with pytest.raises(RotaryJamError):
+            list(c.route_to_position(2))
+        assert c.mechanism_position() != 2  # jammed before reaching the target
 
 
 # -- Sensors -------------------------------------------------------------------
@@ -58,13 +78,6 @@ class TestSensors:
         assert b.broken is False
         b.set(True)
         assert b.read() is True
-
-    def test_position_sensor_validates(self):
-        p = PositionSensor((1, 2, 3, 4), current=1)
-        p.set(4)
-        assert p.read() == 4
-        with pytest.raises(ValueError):
-            p.set(9)
 
 
 # -- Load cell -----------------------------------------------------------------

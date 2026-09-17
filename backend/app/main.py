@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from .config import settings
 from .database import SessionLocal, create_tables
@@ -174,6 +174,12 @@ def create_app() -> FastAPI:
     # through the require_admin-gated /admin/* JSON endpoints above.
     app.include_router(admin_ui_router, prefix=prefix)
     app.include_router(ws_router)
+
+    # Convenience entrypoint: browsers hitting /admin/ui are redirected to the
+    # API-prefixed console route.
+    @app.get("/admin/ui")
+    def admin_ui_redirect() -> RedirectResponse:
+        return RedirectResponse(url=f"{prefix}/admin/ui")
 
     # Debug-only byte-identity fingerprint route. Mounted ONLY when explicitly
     # enabled (`DEBUG_IMAGE_HASH=true`) so it never exists for normal users.

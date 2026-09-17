@@ -404,6 +404,97 @@ def overview(db: Session = Depends(get_db)) -> dict:
     }
 
 
+@router.get("/analytics")
+def analytics(db: Session = Depends(get_db)) -> dict:
+    """Waste analytics for the admin console:
+
+    - volume (kg) and count per day / week / month / year,
+    - busiest stations (kg + count),
+    - waste-type breakdown (kg + count).
+    """
+    from datetime import datetime, timedelta, timezone
+
+    from sqlalchemy import func
+
+    confirmed = DepositSession.status == "confirmed"
+
+    def _series(unit: str, since: datetime):
+        trunc = func.date_trunc(unit, DepositSession.created_at)
+        rows = db.execute(
+            select(
+                trunc,
+                func.coalesce(func.sum(DepositSession.weight_grams), 0.0),
+                func.count(),
+            )
+            .where(confirmed, DepositSession.created_at >= since)
+            .group_by(trunc)
+            .order_by(trunc)
+        ).all()
+        return [
+            {
+                "label": (ts.isoformat()[:10] if unit != "year" else str(ts.year)),
+                "kg": round((grams or 0.0) / 1000.0, 2),
+                "count": int(cnt),
+            }
+            for ts, grams, cnt in rows
+        ]
+
+    now = datetime.now(timezone.utc)
+    periods = {
+        "day": _series("day", now - timedelta(days=30)),
+        "week": _series("week", now - timedelta(weeks=12)),
+        "month": _series("month", now - timedelta(days=365)),
+        "year": _series("year", now - timedelta(days=365 * 5)),
+    }
+
+    station_rows = db.execute(
+        select(
+            Station.station_code,
+            Station.name,
+            func.coalesce(func.sum(DepositSession.weight_grams), 0.0),
+            func.count(),
+        )
+        .join(Station, DepositSession.station_id == Station.id)
+        .where(confirmed)
+        .group_by(Station.id)
+        .order_by(func.sum(DepositSession.weight_grams).desc().nullslast())
+    ).all()
+    by_station = [
+        {
+            "station_code": code,
+            "name": name,
+            "kg": round((grams or 0.0) / 1000.0, 2),
+            "count": int(cnt),
+        }
+        for code, name, grams, cnt in station_rows
+    ]
+
+    type_rows = db.execute(
+        select(
+            DepositSession.expected_class,
+            func.coalesce(func.sum(DepositSession.weight_grams), 0.0),
+            func.count(),
+        )
+        .where(confirmed, DepositSession.expected_class.isnot(None))
+        .group_by(DepositSession.expected_class)
+        .order_by(func.sum(DepositSession.weight_grams).desc().nullslast())
+    ).all()
+    by_type = [
+        {
+            "waste_class": cls,
+            "kg": round((grams or 0.0) / 1000.0, 2),
+            "count": int(cnt),
+        }
+        for cls, grams, cnt in type_rows
+    ]
+
+    return {
+        "periods": periods,
+        "by_station": by_station,
+        "by_type": by_type,
+    }
+
+
 @router.get("/faculties")
 def faculty_stats(db: Session = Depends(get_db)) -> dict:
     from sqlalchemy import func
@@ -564,6 +655,8 @@ def list_stations(db: Session = Depends(get_db)) -> dict:
                 "station_code": s.station_code,
                 "name": s.name,
                 "status": s.status,
+                "bin_full": bool(s.bin_full),
+                "last_error": s.last_error,
                 "live_state": snap.state if snap else None,
                 "last_seen": snap.last_seen if snap else None,
             }

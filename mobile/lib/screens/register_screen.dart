@@ -4,8 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
 import '../../providers/session_provider.dart';
-import '../../widgets/app_logo.dart';
 import '../../widgets/app_text_field.dart';
+import '../../widgets/auth_layout.dart';
 import 'login_screen.dart';
 
 /// The university faculties, exactly as the backend defines them. The ids are
@@ -161,211 +161,165 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: AppColors.foreground),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-      ),
-      bottomNavigationBar: SafeArea(
-        minimum: const EdgeInsets.fromLTRB(24, 8, 24, 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(
-              width: double.infinity,
-              height: 52,
-              child: ElevatedButton(
-                onPressed: _busy ? null : _validateAndSubmit,
-                style: ElevatedButton.styleFrom(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                ),
-                child: _busy
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2.2, color: Colors.white),
-                      )
-                    : const Text('Create account',
-                        style: TextStyle(
-                            fontSize: 15.5, fontWeight: FontWeight.w800)),
-              ),
+    final leading = IconButton(
+      icon: const Icon(Icons.arrow_back, color: Colors.white),
+      onPressed: () => Navigator.of(context).pop(),
+    );
+
+    final errorBanner = _banner == null
+        ? null
+        : Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.errorBg,
+              borderRadius: BorderRadius.circular(12),
             ),
-            const SizedBox(height: 10),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+            child: Row(
               children: [
-                Text('Already have an account?',
-                    style: Theme.of(context).textTheme.bodySmall),
-                TextButton(
-                  onPressed:
-                      _busy ? null : () => Navigator.of(context).pop(),
-                  child: const Text('Log in'),
+                const Icon(Icons.error_outline,
+                    size: 17, color: AppColors.danger),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _banner!,
+                    style: const TextStyle(
+                        fontSize: 12, color: AppColors.danger),
+                  ),
                 ),
               ],
             ),
-          ],
+          );
+
+    final children = <Widget>[
+      // ---- About you -------------------------------------------
+      const _SectionLabel('ABOUT YOU'),
+      _SectionCard(children: [
+        AppTextField(
+          controller: _name,
+          label: 'Full name',
+          icon: Icons.person_outline,
+          hintText: 'Your name',
+          textInputAction: TextInputAction.next,
+          onChanged: (_) {},
+          errorText: _nameError,
         ),
-      ),
-      body: SafeArea(
-        top: false,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(24, 4, 24, 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const AppLogo(size: 36),
-              const SizedBox(height: 18),
-              Text(
-                'Create your account',
-                style: Theme.of(context).textTheme.headlineMedium,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Join EcoLoop and earn points for every bottle you recycle.',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              const SizedBox(height: 20),
-              if (_banner != null) ...[
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppColors.errorBg,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.error_outline,
-                          size: 17, color: AppColors.danger),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          _banner!,
-                          style: const TextStyle(
-                              fontSize: 12, color: AppColors.danger),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 14),
-              ],
+        const SizedBox(height: 14),
+        AppTextField(
+          controller: _studentCode,
+          label: 'Student ID',
+          icon: Icons.badge_outlined,
+          hintText: 'e.g. S-2024-0137',
+          keyboardType: TextInputType.text,
+          textCapitalization: TextCapitalization.characters,
+          textInputAction: TextInputAction.next,
+          onChanged: (_) {},
+          errorText: _studentCodeError,
+        ),
+      ]),
 
-              // ---- About you -------------------------------------------
-              const _SectionLabel('ABOUT YOU'),
-              _SectionCard(children: [
-                AppTextField(
-                  controller: _name,
-                  label: 'Full name',
-                  icon: Icons.person_outline,
-                  hintText: 'Your name',
-                  textInputAction: TextInputAction.next,
-                  onChanged: (_) {},
-                  errorText: _nameError,
-                ),
-                const SizedBox(height: 14),
-                AppTextField(
-                  controller: _studentCode,
-                  label: 'Student ID',
-                  icon: Icons.badge_outlined,
-                  hintText: 'e.g. S-2024-0137',
-                  keyboardType: TextInputType.text,
-                  textCapitalization: TextCapitalization.characters,
-                  textInputAction: TextInputAction.next,
-                  onChanged: (_) {},
-                  errorText: _studentCodeError,
-                ),
-              ]),
-
-              // ---- Faculty ---------------------------------------------
-              const _SectionLabel('FACULTY'),
-              _SectionCard(children: [
-                DropdownButtonFormField<String>(
-                  value: _facultyId,
-                  decoration: InputDecoration(
-                    labelText: 'Select your faculty',
-                    prefixIcon: const Icon(Icons.school_outlined),
-                    border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                    errorText: _facultyError,
-                  ),
-                  hint: const Text('Select your faculty'),
-                  items: kFaculties.entries
-                      .map((e) => DropdownMenuItem(
-                            value: e.key,
-                            child: Text(e.value),
-                          ))
-                      .toList(),
-                  onChanged: (v) => setState(() {
-                    _facultyId = v;
-                    _facultyError = null;
-                  }),
-                ),
-              ]),
-
-              // ---- Sign-in details -------------------------------------
-              const _SectionLabel('SIGN-IN DETAILS'),
-              _SectionCard(children: [
-                AppTextField(
-                  controller: _email,
-                  label: 'Email address',
-                  icon: Icons.mail_outline,
-                  hintText: 'you@example.com',
-                  keyboardType: TextInputType.emailAddress,
-                  autofillHints: true,
-                  autofillHintsGroup: 'email',
-                  textInputAction: TextInputAction.next,
-                  onChanged: (_) {},
-                  errorText: _emailError,
-                ),
-                const SizedBox(height: 14),
-                AppTextField(
-                  controller: _password,
-                  label: 'Password',
-                  icon: Icons.lock_outline,
-                  obscureText: true,
-                  showToggle: true,
-                  hintText: '6+ characters',
-                  textInputAction: TextInputAction.next,
-                  onChanged: (_) => setState(() {}),
-                  errorText: _passwordError,
-                ),
-                _PasswordStrength(score: _passwordStrength),
-                const SizedBox(height: 10),
-                AppTextField(
-                  controller: _confirm,
-                  label: 'Confirm password',
-                  icon: Icons.lock_outline,
-                  obscureText: true,
-                  showToggle: true,
-                  textInputAction: TextInputAction.done,
-                  onChanged: (_) {},
-                  errorText: _confirmError,
-                  onSubmitted: () => _validateAndSubmit(),
-                ),
-              ]),
-              const SizedBox(height: 8),
-              Text(
-                'New accounts start with 0 points. You earn points only when '
-                'the station confirms a real deposit.',
-                textAlign: TextAlign.center,
-                style: Theme.of(context)
-                    .textTheme
-                    .bodySmall
-                    ?.copyWith(fontSize: 11),
-              ),
-            ],
+      // ---- Faculty ---------------------------------------------
+      const _SectionLabel('FACULTY'),
+      _SectionCard(children: [
+        DropdownButtonFormField<String>(
+          value: _facultyId,
+          decoration: InputDecoration(
+            labelText: 'Select your faculty',
+            prefixIcon: const Icon(Icons.school_outlined),
+            border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12)),
+            errorText: _facultyError,
           ),
+          hint: const Text('Select your faculty'),
+          onChanged: (v) => setState(() {
+            _facultyId = v;
+            _facultyError = null;
+          }),
+          items: kFaculties.entries
+              .map((e) => DropdownMenuItem(
+                    value: e.key,
+                    child: Text(e.value),
+                  ))
+              .toList(),
         ),
+      ]),
+
+      // ---- Sign-in details -------------------------------------
+      const _SectionLabel('SIGN-IN DETAILS'),
+      _SectionCard(children: [
+        AppTextField(
+          controller: _email,
+          label: 'Email address',
+          icon: Icons.mail_outline,
+          hintText: 'you@example.com',
+          keyboardType: TextInputType.emailAddress,
+          autofillHints: true,
+          autofillHintsGroup: 'email',
+          textInputAction: TextInputAction.next,
+          onChanged: (_) {},
+          errorText: _emailError,
+        ),
+        const SizedBox(height: 14),
+        AppTextField(
+          controller: _password,
+          label: 'Password',
+          icon: Icons.lock_outline,
+          obscureText: true,
+          showToggle: true,
+          hintText: '6+ characters',
+          textInputAction: TextInputAction.next,
+          onChanged: (_) => setState(() {}),
+          errorText: _passwordError,
+        ),
+        _PasswordStrength(score: _passwordStrength),
+        const SizedBox(height: 10),
+        AppTextField(
+          controller: _confirm,
+          label: 'Confirm password',
+          icon: Icons.lock_outline,
+          obscureText: true,
+          showToggle: true,
+          textInputAction: TextInputAction.done,
+          onChanged: (_) {},
+          errorText: _confirmError,
+          onSubmitted: () => _validateAndSubmit(),
+        ),
+      ]),
+      const SizedBox(height: 8),
+      Text(
+        'New accounts start with 0 points. You earn points only when '
+        'the station confirms a real deposit.',
+        textAlign: TextAlign.center,
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 11),
       ),
+    ];
+
+    final bottomBar = <Widget>[
+      AuthButton(
+        label: 'Create account',
+        busy: _busy,
+        onPressed: _busy ? null : _validateAndSubmit,
+      ),
+      const SizedBox(height: 10),
+      Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text('Already have an account?',
+              style: Theme.of(context).textTheme.bodySmall),
+          TextButton(
+            onPressed: _busy ? null : () => Navigator.of(context).pop(),
+            child: const Text('Log in'),
+          ),
+        ],
+      ),
+    ];
+
+    return AuthLayout(
+      heading: 'Create your account',
+      subheading: 'Join EcoLoop and earn points for every bottle you recycle.',
+      leading: leading,
+      banner: errorBanner,
+      bottomBar: bottomBar,
+      children: children,
     );
   }
 }

@@ -17,12 +17,12 @@ only creates a capture-first session and observes the terminal status.
     scripts/station_capture_e2e_stack.py
 
 Prerequisites: PostgreSQL on localhost:5432 (role recycle/recycle,
-db recycle_vision_e2e), mosquitto at /opt/homebrew/sbin/mosquitto, free ports
+db ecoloop_e2e), mosquitto at /opt/homebrew/sbin/mosquitto, free ports
 1884/8051/8080, and the trained model at ai-service/models/model.onnx. The
 easiest DB bootstrap is:
 
     docker compose -f infra/docker-compose.yml up -d db
-    createdb -U recycle recycle_vision_e2e      # then run the e2e once to create schema
+    createdb -U ecoloop ecoloop_e2e      # then run the e2e once to create schema
 """
 from __future__ import annotations
 
@@ -46,11 +46,11 @@ AI_PORT = 8051
 API_PORT = 8080
 
 DB_URL = (
-    "postgresql+psycopg2://recycle:recycle@localhost:5432/recycle_vision_e2e"
+    "postgresql+psycopg2://ecoloop:ecoloop@localhost:5432/ecoloop_e2e"
 )
 JWT_SECRET = "e2e-secret-not-for-prod"
 
-DEMO_EMAIL = "demo@recycle.vision"
+DEMO_EMAIL = "demo@ecoloop.app"
 DEMO_PASSWORD = "demo123"
 
 

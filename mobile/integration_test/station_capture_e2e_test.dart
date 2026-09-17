@@ -2,9 +2,9 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
-import 'package:recycle_vision/core/api_client.dart';
-import 'package:recycle_vision/core/app_config.dart';
-import 'package:recycle_vision/services/auth_repository.dart';
+import 'package:ecoloop/core/api_client.dart';
+import 'package:ecoloop/core/app_config.dart';
+import 'package:ecoloop/services/auth_repository.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared/shared.dart';
 
@@ -23,13 +23,13 @@ import 'package:shared/shared.dart';
 ///
 /// Prerequisites: `scripts/station_capture_e2e_stack.py` running on the host
 /// (mosquitto 1884 + ai-service 8051 real + backend 8080 + hardware simulator
-/// with CaptureUploader), `demo@recycle.vision/demo123` available.
+/// with CaptureUploader), `demo@ecoloop.app/demo123` available.
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   // Credentials are injected at run time, never committed.
   const email =
-      String.fromEnvironment('E2E_USER', defaultValue: 'demo@recycle.vision');
+      String.fromEnvironment('E2E_USER', defaultValue: 'demo@ecoloop.app');
   const password =
       String.fromEnvironment('E2E_PASSWORD', defaultValue: 'demo123');
 

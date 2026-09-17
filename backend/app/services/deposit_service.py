@@ -373,7 +373,7 @@ class DepositService:
         Applies EVERY gate from the spec before any points move: session
         exists / not expired / operation never completed / station match /
         expected position / minimum weight / weight stable / beam event valid /
-        carriage reached target / mechanical confirmation."""
+        mechanism at target position / mechanical confirmation."""
         operation_id = event.get("operation_id")
         if not operation_id:
             raise DepositEventError("missing operation_id")
@@ -408,17 +408,13 @@ class DepositService:
         weight_stable = bool(event.get("weight_stable", False))
         beam_seen = bool(event.get("beam_event_seen", False))
         mechanical = bool(event.get("mechanical_confirmed", False))
-        # Mechanism-neutral position report. V1 (carriage) firmware publishes
-        # `carriage_position`; V2 (rotary) publishes `mechanism_position`.
-        # Both mean "the abstract mechanism's current compartment index".
-        mechanism_pos = event.get("mechanism_position")
-        if mechanism_pos is None:
-            mechanism_pos = event.get("carriage_position")
-        carriage_position = int(mechanism_pos or 0)
+        # The rotary mechanism reports `mechanism_position`: the compartment
+        # index the chute currently aligns with.
+        mechanism_position = int(event.get("mechanism_position") or 0)
 
         reason = self._physical_failure(
             session, claimed_status, actual_position, weight, weight_stable,
-            beam_seen, mechanical, carriage_position,
+            beam_seen, mechanical, mechanism_position,
         )
         if reason is not None:
             return self._reject(db, session, reason)
@@ -500,7 +496,7 @@ class DepositService:
         weight_stable: bool,
         beam_seen: bool,
         mechanical: bool,
-        carriage_position: int,
+        mechanism_position: int,
     ) -> str | None:
         if claimed_status != CONFIRMED:
             return _MACHINE_REASONS.get(claimed_status, "rejected by the machine")
@@ -520,8 +516,8 @@ class DepositService:
             return "no beam break detected"
         if not mechanical:
             return "no mechanical confirmation"
-        if carriage_position != actual_position:
-            return f"mechanism not at deposit position ({carriage_position})"
+        if mechanism_position != actual_position:
+            return f"mechanism not at deposit position ({mechanism_position})"
         return None
 
 

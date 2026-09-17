@@ -89,11 +89,7 @@ def _remember_station(payload: dict) -> None:
         code,
         status=_status_of(status),
         state=state or snap.state,
-        carriage_position=(
-            payload.get("mechanism_position")
-            if payload.get("mechanism_position") is not None
-            else payload.get("carriage_position", snap.carriage_position)
-        ),
+        mechanism_position=payload.get("mechanism_position", snap.mechanism_position),
         current_position=payload.get("current_position", snap.current_position),
         door_state=payload.get("door_state", snap.door_state),
         weight_grams=payload.get("weight_grams", snap.weight_grams),

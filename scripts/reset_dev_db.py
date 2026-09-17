@@ -7,7 +7,7 @@ NO fabricated leaderboard, NO seeded activity. The database is then empty of
 any runtime data; all points arrive only through the real AI -> MQTT ->
 simulator -> backend chain.
 
-    scripts/reset_dev_db.py            # default dev stack (recycle_vision)
+    scripts/reset_dev_db.py            # default dev stack (ecoloop)
     scripts/reset_dev_db.py --db e2e   # the e2e harness database
 
 This is intentionally destructive — it truncates the target database entirely.
@@ -23,8 +23,8 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "backend"))
 
 DB_ALIASES = {
-    "dev": "postgresql+psycopg2://recycle:recycle@localhost:5432/recycle_vision",
-    "e2e": "postgresql+psycopg2://recycle:recycle@localhost:5432/recycle_vision_e2e",
+    "dev": "postgresql+psycopg2://ecoloop:ecoloop@localhost:5432/ecoloop",
+    "e2e": "postgresql+psycopg2://ecoloop:ecoloop@localhost:5432/ecoloop_e2e",
 }
 
 

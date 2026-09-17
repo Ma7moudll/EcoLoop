@@ -1,8 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:recycle_vision/app.dart';
-import 'package:recycle_vision/core/api_client.dart';
-import 'package:recycle_vision/providers/providers.dart';
+import 'package:ecoloop/app.dart';
+import 'package:ecoloop/core/api_client.dart';
+import 'package:ecoloop/providers/providers.dart';
 import 'package:shared/shared.dart';
 
 import 'helpers.dart';

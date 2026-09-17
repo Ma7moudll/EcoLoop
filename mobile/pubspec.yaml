@@ -1,5 +1,5 @@
-name: recycle_vision
-description: "Recycle Vision — AI-powered waste scanning connected to the EcoLoop Station."
+name: ecoloop
+description: "EcoLoop — AI-powered waste scanning connected to the EcoLoop Station."
 publish_to: 'none'
 version: 0.1.0+1
 

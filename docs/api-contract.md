@@ -55,7 +55,7 @@ test-only classifier — never the default).
 
 Two identification directions exist across the product family:
 
-- *Recycle Vision app*: the **phone scans the station** QR.
+- *EcoLoop app*: the **phone scans the station** QR.
 - *Ecolamp app*: the **station tablet scans the student's** short-lived
   handoff QR (`ECOLOOP:HANDOFF:<single-use token>`).
 
@@ -66,8 +66,8 @@ UPDATE-guarded), expires in ~120 s, and is worthless without the station's
 
 ### Station mechanism metadata
 
-`GET /stations` items include `"mechanism": "carriage" | "rotary"` and expose
-mechanism-neutral telemetry (`mechanism_position`). Carriage vs rotary is an
+`GET /stations` items include `"mechanism": "rotary"` and expose
+abstract telemetry (`mechanism_position`). The mechanism is an
 implementation detail of the unit; commands express compartment intent only.
 
 Deposit wire shape — `status` is `capture`/`analyzing` (station-camera capture

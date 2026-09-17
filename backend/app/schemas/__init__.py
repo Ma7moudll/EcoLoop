@@ -116,11 +116,8 @@ class CallbackEvent(BaseModel):
     event: str = "deposit_result"
     status: str = "confirmed"
     actual_position: int = 0
-    # Mechanism position: V1 (carriage) firmware sends `carriage_position`;
-    # V2 (rotary) firmware sends `mechanism_position`. At least one is
-    # required — the backend validates whichever the unit publishes.
-    carriage_position: int = 0
-    mechanism_position: int | None = None
+    # Compartment index the rotary chute currently aligns with (1..4).
+    mechanism_position: int = 0
     weight_grams: float = 0.0
     weight_stable: bool = False
     beam_event_seen: bool = False

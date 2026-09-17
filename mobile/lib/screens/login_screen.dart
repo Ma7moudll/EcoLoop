@@ -4,8 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
 import '../../providers/session_provider.dart';
-import '../../widgets/app_logo.dart';
 import '../../widgets/app_text_field.dart';
+import '../../widgets/auth_layout.dart';
 import 'register_screen.dart';
 
 /// Login with email + password. Errors (invalid credentials, offline) surface
@@ -69,132 +69,111 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         session.autoRestored &&
         session.user != null;
 
-    return Scaffold(
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const AppLogo(size: 40),
-              const SizedBox(height: 30),
-              if (restored) ...[
-                _RestoredSessionCard(
-                  name: session.user!.name,
-                  subtitle: session.user!.studentCode,
-                  onContinue: () =>
-                      ref.read(sessionProvider.notifier).continueRestored(),
+    final errorBanner = _banner == null
+        ? null
+        : Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.errorBg,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.error_outline,
+                    size: 17, color: AppColors.danger),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _banner!,
+                    style: const TextStyle(
+                        fontSize: 12, color: AppColors.danger),
+                  ),
                 ),
-                const SizedBox(height: 22),
-                Row(
-                  children: [
-                    const Expanded(child: Divider(color: AppColors.line)),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: Text(
-                        'or sign in with another account',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ),
-                    const Expanded(child: Divider(color: AppColors.line)),
-                  ],
-                ),
-                const SizedBox(height: 22),
               ],
-              Text(
-                'Welcome back!',
-                style: Theme.of(context).textTheme.headlineMedium,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Log in to continue recycling.',
+            ),
+          );
+
+    final children = <Widget>[
+      if (restored) ...[
+        _RestoredSessionCard(
+          name: session.user!.name,
+          subtitle: session.user!.studentCode,
+          onContinue: () =>
+              ref.read(sessionProvider.notifier).continueRestored(),
+        ),
+        if (errorBanner == null) const SizedBox(height: 18),
+        Row(
+          children: [
+            const Expanded(child: Divider(color: AppColors.line)),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Text(
+                'or sign in with another account',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
-              const SizedBox(height: 26),
-              if (_banner != null) ...[
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppColors.errorBg,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.error_outline,
-                          size: 17, color: AppColors.danger),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          _banner!,
-                          style: const TextStyle(
-                              fontSize: 12, color: AppColors.danger),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 14),
-              ],
-              AppTextField(
-                controller: _email,
-                label: 'Email address',
-                icon: Icons.mail_outline,
-                hintText: 'you@example.com',
-                keyboardType: TextInputType.emailAddress,
-                autofillHints: true,
-                autofillHintsGroup: 'email',
-                textInputAction: TextInputAction.next,
-                onChanged: (_) {},
-                errorText: _emailError,
-                onSubmitted: () => _passwordFocus(context),
-              ),
-              const SizedBox(height: 16),
-              AppTextField(
-                controller: _password,
-                label: 'Password',
-                icon: Icons.lock_outline,
-                obscureText: true,
-                showToggle: true,
-                textInputAction: TextInputAction.done,
-                onChanged: (_) {},
-                errorText: _passwordError,
-                onSubmitted: () => _validateAndSubmit(),
-              ),
-              const SizedBox(height: 26),
-              ElevatedButton(
-                onPressed: _busy ? null : _validateAndSubmit,
-                child: _busy
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2.2, color: Colors.white),
-                      )
-                    : const Text('Log in'),
-              ),
-              const SizedBox(height: 14),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    'New to EcoLoop?',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                  TextButton(
-                    onPressed: _busy
-                        ? null
-                        : () => Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                  builder: (_) => const RegisterScreen()),
-                            ),
-                    child: const Text('Create account'),
-                  ),
-                ],
-              ),
-            ],
-          ),
+            ),
+            const Expanded(child: Divider(color: AppColors.line)),
+          ],
         ),
+        const SizedBox(height: 18),
+      ],
+      if (errorBanner != null) ...[errorBanner, const SizedBox(height: 14)],
+      AppTextField(
+        controller: _email,
+        label: 'Email address',
+        icon: Icons.mail_outline,
+        hintText: 'you@example.com',
+        keyboardType: TextInputType.emailAddress,
+        autofillHints: true,
+        autofillHintsGroup: 'email',
+        textInputAction: TextInputAction.next,
+        onChanged: (_) {},
+        errorText: _emailError,
+        onSubmitted: () => _passwordFocus(context),
       ),
+      const SizedBox(height: 16),
+      AppTextField(
+        controller: _password,
+        label: 'Password',
+        icon: Icons.lock_outline,
+        obscureText: true,
+        showToggle: true,
+        textInputAction: TextInputAction.done,
+        onChanged: (_) {},
+        errorText: _passwordError,
+        onSubmitted: () => _validateAndSubmit(),
+      ),
+      const SizedBox(height: 24),
+      AuthButton(
+        label: 'Log in',
+        busy: _busy,
+        onPressed: _busy ? null : _validateAndSubmit,
+      ),
+      const SizedBox(height: 16),
+      Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            'New to EcoLoop?',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          TextButton(
+            onPressed: _busy
+                ? null
+                : () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                          builder: (_) => const RegisterScreen()),
+                    ),
+            child: const Text('Create account'),
+          ),
+        ],
+      ),
+    ];
+
+    return AuthLayout(
+      heading: 'Welcome back',
+      subheading: 'Log in to keep recycling.',
+      children: children,
     );
   }
 

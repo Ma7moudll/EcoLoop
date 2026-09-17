@@ -9,6 +9,7 @@ import '../core/formatters.dart';
 import '../core/idempotency_key.dart';
 import '../providers/data_providers.dart';
 import '../providers/providers.dart';
+import '../widgets/brand_app_bar.dart';
 import '../widgets/state_views.dart';
 
 /// Rewards marketplace: exchange points for cash payouts, campus food
@@ -22,9 +23,7 @@ class RewardsScreen extends ConsumerWidget {
     final catalogAsync = ref.watch(rewardsCatalogProvider);
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('Rewards',
-            style: TextStyle(fontWeight: FontWeight.w800)),
+      appBar: BrandAppBar(
         actions: [
           TextButton.icon(
             onPressed: () => Navigator.of(context).push(

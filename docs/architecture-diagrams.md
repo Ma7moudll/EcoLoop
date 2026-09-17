@@ -11,7 +11,7 @@ for topic payloads).
 ```
 +--------------------------------------------------------------------------+
 |                              STUDENT (phone)                              |
-|   Flutter app — com.ecoloop.recycle_vision                                |
+|   Flutter app — com.ecoloop.ecoloop                                |
 |   5 tabs: Home | Impact | Rewards | Leaderboard | Profile    [ SCAN FAB ] |
 +---------------------+---------------------------------------+------------+
                       | HTTPS  /api/v1/*                       | WSS
@@ -53,7 +53,7 @@ for topic payloads).
 | sessions  |   +-------------------------------+
 | routing_  |   | STATION HARDWARE (ESP32 /     |
 |  policies |   | hardware-simulator)           |
-| challenges|   | ST-001: camera, carriage,     |
+| challenges|   | ST-001: camera, chute,        |
 | user_chal-|   | weight sensor, beam, bins 1-4 |
 |  lenges   |   +-------------------------------+
 | rewards   |
@@ -96,7 +96,7 @@ for topic payloads).
     |                  |                                                          |
     |                  | GATES: station match . not expired . not terminal .      |
     |                  |        position match . min weight . stability .         |
-    |                  |        beam seen . mechanical . carriage at position     |
+    |                  |        beam seen . mechanical . chute at position     |
     |                  |                                                          |
     |                  | BEGIN TX                                                 |
     |                  |   insert WasteEvent                                      |

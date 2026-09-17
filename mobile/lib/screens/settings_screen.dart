@@ -99,7 +99,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               const _InfoTile(
                 icon: Icons.info_outline,
                 title: 'Version',
-                subtitle: 'Recycle Vision MVP 1.0',
+                subtitle: 'EcoLoop MVP 1.0',
               ),
               const Padding(
                 padding: EdgeInsets.fromLTRB(4, 10, 4, 0),

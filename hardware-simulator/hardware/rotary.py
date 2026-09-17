@@ -1,7 +1,7 @@
 """Rotary Sorting Mechanism V2 — mechanical model and calibration layer.
 
-Implements the SAME station contract as the Carriage V1 simulator
-(`docs/mqtt-contract.md`) with a rotating chute instead of a moving carriage:
+Implements the EcoLoop station contract (`docs/mqtt-contract.md`) with a
+rotating chute that aligns its outlet with the routed bin:
 
     ROUTE_TO(destination_position)
         -> lookup target angle (BinMap calibration table)
@@ -11,9 +11,9 @@ Implements the SAME station contract as the Carriage V1 simulator
         -> beam / load-cell verification
         -> deposit_result with `mechanism_position`
 
-Mechanical vocabulary lives HERE ONLY — every wire payload uses the
-mechanism-neutral field name `mechanism_position` (never carriage_position),
-so the backend cannot tell V1 from V2 and neither can the student app.
+Mechanical vocabulary lives HERE ONLY — every wire payload reports the
+abstract `mechanism_position` field, so neither the backend nor the student
+app ever sees motor or chute details.
 
 All geometry/motor values are configuration, never scattered magic numbers:
 see `BinMapConfig` / `RotaryChuteConfig`.
@@ -123,7 +123,7 @@ class RotaryChuteConfig:
     homing_timeout_seconds: float = 10.0
     max_rotation_without_sensor_deg: float = 450.0  # >360 => sensor missed
     # Simulated mechanics.
-    rotation_time_per_90_deg: float = 0.3  # matches V1 per-position timing scale
+    rotation_time_per_90_deg: float = 0.3  # ~per-compartment travel time scale
 
 
 class RotaryChute:
@@ -230,7 +230,7 @@ class RotaryChute:
 
 
 # ---------------------------------------------------------------------------
-# Station assembly — same lifecycle as V1's Station
+# Station assembly — shared station lifecycle
 # ---------------------------------------------------------------------------
 
 @dataclass
@@ -257,9 +257,8 @@ class RotaryStation:
     """One EcoLoop V2 unit: fixed four-bin ring, single rotating chute,
     per-bin load cell + fill sensor, station-side camera upstream.
 
-    Reuses the EXACT V1 StateMachine so both mechanisms share one lifecycle;
-    snapshots report `mechanism_position` (neutral) instead of any carriage
-    vocabulary."""
+    Uses the shared StateMachine lifecycle; snapshots report the abstract
+    `mechanism_position` — never mechanical vocabulary."""
 
     def __init__(self, chute: RotaryChute, load_cell, beam, fill_levels: dict[str, RotaryFillLevel] | None = None) -> None:
         from .state_machine import StateMachine
@@ -274,7 +273,7 @@ class RotaryStation:
     def state(self):
         return self.machine.state
 
-    # -- physical actions (mirror Station V1 API) -----------------------------
+    # -- physical actions -----------------------------------------------------
 
     def rotate_to(self, position: int, on_progress=None) -> None:
         from .state_machine import MachineState

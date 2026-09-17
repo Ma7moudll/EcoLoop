@@ -10,6 +10,7 @@ import '../../providers/providers.dart';
 import '../../providers/session_provider.dart';
 import '../../providers/shell_tab_provider.dart';
 import '../../services/avatar_picker.dart';
+import '../../widgets/brand_app_bar.dart';
 import 'challenges_screen.dart';
 import 'history_screen.dart';
 import 'rewards_screen.dart';
@@ -26,14 +27,7 @@ class ProfileScreen extends ConsumerWidget {
     final meAsync = ref.watch(currentUserProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        title: const Text(
-          'Profile',
-          style: TextStyle(fontWeight: FontWeight.w800),
-        ),
+      appBar: BrandAppBar(
         actions: [
           IconButton(
             tooltip: 'Settings',

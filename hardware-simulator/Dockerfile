@@ -11,5 +11,5 @@ RUN pip install --no-cache-dir paho-mqtt>=2.1
 COPY . .
 
 # The hyphenated directory can't be a Python package, so the entrypoint runs
-# the top-level `simulator.py` with its own dir on sys.path.
-CMD ["python", "simulator.py"]
+# the top-level `rotary_simulator.py` with its own dir on sys.path.
+CMD ["python", "rotary_simulator.py"]

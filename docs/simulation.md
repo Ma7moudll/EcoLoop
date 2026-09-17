@@ -13,14 +13,13 @@ Components in `hardware-simulator/`:
 | Module | What it models |
 |---|---|
 | `config.py` | env-driven physical parameters (movement time, noise, thresholds) |
-| `hardware/carriage.py` | carriage that moves position-by-position; configurable jam |
+| `hardware/rotary.py` | rotating chute: homing, shortest-path rotation, jam injection, BinMap calibration |
 | `hardware/load_cell.py` | HX711-like load cell; deterministic settle profile + gaussian noise |
-| `hardware/sensors.py` | IR beam, position and door sensors |
+| `hardware/sensors.py` | IR beam across the station opening |
 | `hardware/state_machine.py` | strict transition table (`IllegalTransition` on invalid moves) |
-| `hardware/station.py` | one station unit (motor + sensors + machine) |
-| `scenarios.py` | 6 deterministic deposit plans (see mqtt-contract) |
+| `scenarios.py` | deterministic deposit plans (see mqtt-contract) |
 | `mqtt_client.py` | paho wrapper, protocol-identical to ESP32 code |
-| `simulator.py` | runtime + CLI that turns a plan into published telemetry |
+| `rotary_simulator.py` | runtime + CLI that turns a plan into published telemetry |
 
 The load cell settle profile is a piecewise ADC trace:
 `0.0s → 0g, 0.8s → 4g, 1.4s → 12g, 2.0s → 18.4g (stable)`.
@@ -78,7 +77,7 @@ rows, rejected/expired/cancelled award 0, final balance 45+5+5+5=60). The
 confidence scenarios use **real model scores** on curated fixture images — the
 ai-service is started with `DEVELOPMENT_FORCE_*` poison values to prove the
 production path ignores them. Requires local PostgreSQL (`recycle`/`recycle`,
-database `recycle_vision_e2e`, schema at alembic head) and free ports
+database `ecoloop_e2e`, schema at alembic head) and free ports
 1884/8051/8080.
 
 ```bash

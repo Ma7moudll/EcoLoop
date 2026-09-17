@@ -1,5 +1,5 @@
 name: shared
-description: Recycle Vision shared domain models and policies (app + server).
+description: EcoLoop shared domain models and policies (app + server).
 version: 0.1.0
 publish_to: none
 

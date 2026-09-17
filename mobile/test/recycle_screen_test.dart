@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:recycle_vision/providers/providers.dart';
-import 'package:recycle_vision/providers/session_provider.dart';
-import 'package:recycle_vision/screens/recycle/recycle_flow_screen.dart';
-import 'package:recycle_vision/screens/recycle/recycle_screen.dart';
+import 'package:ecoloop/providers/providers.dart';
+import 'package:ecoloop/providers/session_provider.dart';
+import 'package:ecoloop/screens/recycle/recycle_flow_screen.dart';
+import 'package:ecoloop/screens/recycle/recycle_screen.dart';
 import 'package:shared/shared.dart';
 
 import 'helpers.dart';

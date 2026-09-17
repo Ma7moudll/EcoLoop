@@ -142,7 +142,6 @@ class TestMechanismNeutrality:
             assert "carriage" not in str(s).lower()
 
     def test_station_snapshot_uses_neutral_fields_and_fill_levels(self):
-        from tests.test_rotary_simulator import make_sim as _m  # noqa: F401
         sim = make_sim()
         snap = sim.station.snapshot()
         assert snap["mechanism"] == "rotary"

@@ -24,7 +24,7 @@ def confirm_deposit(client, auth, prediction, **kwargs) -> dict:
 
 def test_impact_after_one_deposit(client, auth, plastic_prediction):
     confirm_deposit(client, auth, plastic_prediction,
-                    position=1, weight=18.4, stable=True, beam=True, mech=True, carriage=1)
+                    position=1, weight=18.4, stable=True, beam=True, mech=True, mech_position=1)
     r = client.get("/api/v1/impact", headers=auth)
     assert r.status_code == 200
     body = r.json()
@@ -37,7 +37,7 @@ def test_impact_after_one_deposit(client, auth, plastic_prediction):
 
 def test_waste_history_lists_audit_trail(client, auth, plastic_prediction):
     session = confirm_deposit(client, auth, plastic_prediction,
-                              position=1, weight=18.4, stable=True, beam=True, mech=True, carriage=1)
+                              position=1, weight=18.4, stable=True, beam=True, mech=True, mech_position=1)
     r = client.get("/api/v1/waste/history", headers=auth)
     assert r.status_code == 200
     items = r.json()["items"]
@@ -57,7 +57,7 @@ def test_rejected_deposit_still_in_history_with_zero_points(client, auth, plasti
     client.post("/api/v1/deposit/callback/event",
                 headers={"X-Station-Key": "dev-station-key"},
                 json=confirm_event(session["operation_id"], position=2, weight=18.4,
-                                   stable=True, beam=True, mech=True, carriage=2))
+                                   stable=True, beam=True, mech=True, mech_position=2))
     r = client.get("/api/v1/waste/history", headers=auth)
     items = r.json()["items"]
     ev = [i for i in items if i["operation_id"] == session["operation_id"]][0]
@@ -66,7 +66,7 @@ def test_rejected_deposit_still_in_history_with_zero_points(client, auth, plasti
 
 def test_leaderboard_aggregates_students_and_faculties(client, auth, plastic_prediction):
     confirm_deposit(client, auth, plastic_prediction,
-                    position=1, weight=18.4, stable=True, beam=True, mech=True, carriage=1)
+                    position=1, weight=18.4, stable=True, beam=True, mech=True, mech_position=1)
     r = client.get("/api/v1/leaderboard?scope=students", headers=auth)
     entries = r.json()["entries"]
     top = entries[0]
@@ -121,7 +121,7 @@ def test_update_profile_rejects_unknown_faculty_and_empty(client, auth):
 
 def test_change_password_invalidates_outstanding_tokens(client):
     login = client.post("/api/v1/auth/login",
-                        json={"email": "demo@recycle.vision", "password": "demo123"})
+                        json={"email": "demo@ecoloop.app", "password": "demo123"})
     old_token = login.json()["token"]
     old_auth = {"Authorization": f"Bearer {old_token}"}
 
@@ -140,9 +140,9 @@ def test_change_password_invalidates_outstanding_tokens(client):
 
     # Login works with the new password only.
     assert client.post("/api/v1/auth/login",
-                       json={"email": "demo@recycle.vision", "password": "demo123"}).status_code == 401
+                       json={"email": "demo@ecoloop.app", "password": "demo123"}).status_code == 401
     relogin = client.post("/api/v1/auth/login",
-                          json={"email": "demo@recycle.vision", "password": "new-pass-123"})
+                          json={"email": "demo@ecoloop.app", "password": "new-pass-123"})
     assert relogin.status_code == 200
 
 

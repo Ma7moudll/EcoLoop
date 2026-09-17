@@ -11,7 +11,7 @@ environment, and a real deposit round-trips through the cloud broker.
 
 Isolation: every run uses its own topic prefix `e2ecloud/<run-id>/stations/...`
 so the harness never touches real station topics on the shared cluster.
-Requires PostgreSQL (recycle_vision_e2e), mosquitto NOT needed.
+Requires PostgreSQL (ecoloop_e2e), mosquitto NOT needed.
 """
 from __future__ import annotations
 
@@ -32,8 +32,8 @@ AI_MODEL_PATH = ROOT / "ai-service" / "models" / "model.onnx"
 HOST = "127.0.0.1"
 AI_PORT = 8053
 API_PORT = 8083
-DB_URL = "postgresql+psycopg2://recycle:recycle@localhost:5432/recycle_vision_e2e"
-DEMO_EMAIL = "demo@recycle.vision"
+DB_URL = "postgresql+psycopg2://ecoloop:ecoloop@localhost:5432/ecoloop_e2e"
+DEMO_EMAIL = "demo@ecoloop.app"
 DEMO_PASSWORD = "demo123"
 
 
@@ -127,10 +127,10 @@ def main() -> None:
         })
         sim_proc = subprocess.Popen(
             [PYTHON, "-c",
-             "from config import SimConfig; from simulator import EcoLoopSimulator; "
-             "from hardware import Carriage, LoadCell; "
+             "from config import SimConfig; from rotary_simulator import EcoLoopRotarySimulator; "
+             "from hardware import RotaryChute, RotaryChuteConfig, LoadCell; "
              "cfg = SimConfig(); "
-             "sim = EcoLoopSimulator(config=cfg, carriage=Carriage(initial_position=1, movement_time_per_step=0), load_cell=LoadCell(noise_grams=0, seed=7)); "
+             "sim = EcoLoopRotarySimulator(config=cfg, chute=RotaryChute(config=RotaryChuteConfig(rotation_time_per_90_deg=0.0)), load_cell=LoadCell(noise_grams=0, seed=7)); "
              "sim.mqtt.set_command_handler(sim._on_command); "
              "sim.mqtt.start(cfg.command_topic()); "
              "sim.mqtt.connected.wait(30); "

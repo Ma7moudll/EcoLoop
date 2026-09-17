@@ -2,7 +2,7 @@
 # =============================================================================
 # dev_up.sh — start the COMPLETE REAL development stack (no demo, no mocks).
 #
-#   * PostgreSQL        (local, role recycle/recycle, db recycle_vision)
+#   * PostgreSQL        (local, role recycle/recycle, db ecoloop)
 #   * mosquitto broker  (port 1884 — localhost dev uses 1884 like the e2e)
 #   * ai-service        (port 8051 — REAL ONNX classifier, gate enabled)
 #   * backend           (port 8080 — FastAPI + Postgres, MQTT -> broker,
@@ -28,8 +28,8 @@ API_PORT="${API_PORT:-8080}"
 # --- preconditions -----------------------------------------------------------
 [ -x "$MOSQUITTO_BIN" ] || { echo "FATAL: mosquitto not found at $MOSQUITTO_BIN"; exit 1; }
 [ -f "$AI_MODEL" ] || { echo "FATAL: trained model not found at $AI_MODEL"; exit 1; }
-PGPASSWORD=recycle psql -h localhost -U recycle -lqt 2>/dev/null | cut -d'|' -f1 | grep -q recycle_vision \
-  || { echo "FATAL: db recycle_vision missing — start Postgres and create it"; exit 1; }
+PGPASSWORD=ecoloop psql -h localhost -U ecoloop -lqt 2>/dev/null | cut -d'|' -f1 | grep -q ecoloop \
+  || { echo "FATAL: db ecoloop missing — start Postgres and create it"; exit 1; }
 
 port_in_use() { nc -z 127.0.0.1 "$1" 2>/dev/null; }
 
@@ -108,7 +108,7 @@ if is_service_up "$API_PORT" "backend"; then :; else
     JWT_SECRET="$(cat "$JWT_FILE")"
   fi
   PYTHONPATH="$ROOT/backend" \
-  DATABASE_URL="postgresql+psycopg2://recycle:recycle@localhost:5432/recycle_vision" \
+  DATABASE_URL="postgresql+psycopg2://ecoloop:ecoloop@localhost:5432/ecoloop" \
   MQTT_BROKER_HOST=127.0.0.1 \
   MQTT_BROKER_PORT="$MQTT_PORT" \
   MQTT_USERNAME="$MQTT_DEV_USER" \
@@ -123,7 +123,7 @@ if is_service_up "$API_PORT" "backend"; then :; else
 fi
 
 echo
-echo "Recycle Vision dev stack:"
+echo "EcoLoop dev stack:"
 echo "  mosquitto   :$MQTT_PORT  (log .dev-mosquitto.log)"
 echo "  ai-service  :$AI_PORT   real classifier (log .dev-ai.log)"
 echo "  backend     :$API_PORT   (log .dev-backend.log)"

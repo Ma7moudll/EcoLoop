@@ -5,6 +5,7 @@ import 'package:shared/shared.dart';
 import '../../core/app_theme.dart';
 import '../../providers/data_providers.dart';
 import '../../services/data_repository.dart';
+import '../../widgets/app_logo.dart';
 import '../../widgets/gamification_cards.dart';
 import '../../widgets/state_views.dart';
 
@@ -32,19 +33,10 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         scrolledUnderElevation: 0,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Leaderboard',
-                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 20)),
-            Text(
-              _scope == LeaderScope.students
-                  ? 'Top recyclers on campus'
-                  : 'Faculty standings',
-              style: const TextStyle(
-                  fontSize: 11.5, color: AppColors.muted, fontWeight: FontWeight.w500),
-            ),
-          ],
+        titleSpacing: 0,
+        title: const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16),
+          child: AppLogo(size: 22, showWordmark: true),
         ),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(54),

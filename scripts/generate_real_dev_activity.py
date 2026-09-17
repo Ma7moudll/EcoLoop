@@ -38,9 +38,9 @@ os.environ.setdefault("SIMULATOR_RAMP_STEP", "0")
 
 import httpx  # noqa: E402
 
-from hardware import Carriage, LoadCell  # noqa: E402
+from hardware import LoadCell, RotaryChute, RotaryChuteConfig  # noqa: E402
 from scenarios import DepositPlan  # noqa: E402
-from simulator import EcoLoopSimulator  # noqa: E402
+from rotary_simulator import EcoLoopRotarySimulator  # noqa: E402
 
 MQTT_PORT = int(os.environ.get("MQTT_PORT", "1884"))
 STATION_CODE = os.environ.get("STATION_CODE", "ST-001")
@@ -114,10 +114,10 @@ def main() -> None:
     cfg = SimConfig()
     cfg.broker_host = "127.0.0.1"
     cfg.broker_port = MQTT_PORT
-    cfg.movement_time_seconds = 0.0
-    sim = EcoLoopSimulator(
+    chute = RotaryChute(config=RotaryChuteConfig(rotation_time_per_90_deg=0.0))
+    sim = EcoLoopRotarySimulator(
         config=cfg,
-        carriage=Carriage(initial_position=1, movement_time_per_step=0.0),
+        chute=chute,
         load_cell=LoadCell(noise_grams=0, seed=11),
     )
     control = _ScenarioControl()

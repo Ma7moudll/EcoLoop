@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:recycle_vision/core/api_client.dart';
-import 'package:recycle_vision/providers/data_providers.dart';
-import 'package:recycle_vision/providers/providers.dart';
-import 'package:recycle_vision/screens/leaderboard_screen.dart';
-import 'package:recycle_vision/services/data_repository.dart';
+import 'package:ecoloop/core/api_client.dart';
+import 'package:ecoloop/providers/data_providers.dart';
+import 'package:ecoloop/providers/providers.dart';
+import 'package:ecoloop/screens/leaderboard_screen.dart';
+import 'package:ecoloop/services/data_repository.dart';
 import 'package:shared/shared.dart';
 
 /// Repairs regression guards for the redesigned leaderboard:

@@ -1,6 +1,4 @@
-"""Full-chain integration test for ROTARY V2 — same logical flow as the
-Carriage V1 suite (test_mqtt_deposit_flow.py), proving the backend treats
-both mechanisms identically:
+"""Full-chain integration test for the ROTARY V2 station mechanism:
 
     FastAPI ──route command──▶ MQTT broker ◀─subscribe── EcoLoopRotarySimulator
     backend ◀──── deposit_result (mechanism_position) ────────── simulator
@@ -19,7 +17,7 @@ BROKER_PORT = 1884
 BROKER_USER = "backend"
 BROKER_PASS = "itest-broker-pass"
 
-SIM_PATH = "/Users/mac/Desktop/ECO/recycle-vision/hardware-simulator"
+SIM_PATH = "/Users/mac/Desktop/ECO/EcoLoop/hardware-simulator"
 
 
 @pytest.fixture

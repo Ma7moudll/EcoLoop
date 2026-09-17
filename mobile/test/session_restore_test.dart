@@ -1,10 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:recycle_vision/core/api_client.dart';
-import 'package:recycle_vision/providers/providers.dart';
-import 'package:recycle_vision/providers/session_provider.dart';
-import 'package:recycle_vision/services/auth_repository.dart';
+import 'package:ecoloop/core/api_client.dart';
+import 'package:ecoloop/providers/providers.dart';
+import 'package:ecoloop/providers/session_provider.dart';
+import 'package:ecoloop/services/auth_repository.dart';
 import 'package:shared/shared.dart';
 
 /// Regression guard for the "app opened an old account without signing in"

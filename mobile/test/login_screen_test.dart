@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:recycle_vision/providers/providers.dart';
-import 'package:recycle_vision/screens/login_screen.dart';
-import 'package:recycle_vision/screens/register_screen.dart';
+import 'package:ecoloop/providers/providers.dart';
+import 'package:ecoloop/screens/login_screen.dart';
+import 'package:ecoloop/screens/register_screen.dart';
 
 import 'helpers.dart';
 

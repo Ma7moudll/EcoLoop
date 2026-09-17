@@ -55,7 +55,7 @@ def capture(client, operation_id: str, image: bytes = b"fake-frame-jpeg") -> tup
 
 def demo_user_id() -> str:
     with SessionLocal() as db:
-        return db.query(User).filter(User.email == "demo@recycle.vision").first().id
+        return db.query(User).filter(User.email == "demo@ecoloop.app").first().id
 
 
 def user_points(user_id: str) -> int:
@@ -237,7 +237,7 @@ def test_capture_ai_service_unavailable_503_and_capture_retake(client, auth, mon
 
     demo_session = client.post(
         "/api/v1/auth/login",
-        json={"email": "demo@recycle.vision", "password": "demo123"},
+        json={"email": "demo@ecoloop.app", "password": "demo123"},
     ).json()["token"]
     before = user_points(demo_user_id())
 
@@ -289,7 +289,7 @@ def test_capture_can_then_complete_via_physical_event(client, auth, monkeypatch)
         "/api/v1/deposit/callback/event",
         headers={"X-Station-Key": STATION_KEY},
         json=confirm_event(
-            session["operation_id"], position=1, weight=18.4, carriage=1,
+            session["operation_id"], position=1, weight=18.4, mech_position=1,
         ),
     )
     assert r.status_code == 200, r.text
@@ -327,7 +327,7 @@ def test_callback_without_station_key_cannot_award_points(client, auth, monkeypa
     r = client.post(
         "/api/v1/deposit/callback/event",
         json=confirm_event(
-            session["operation_id"], position=1, weight=18.4, carriage=1,
+            session["operation_id"], position=1, weight=18.4, mech_position=1,
         ),
     )
     assert r.status_code == 401
@@ -348,7 +348,7 @@ def test_callback_wrong_station_key_rejected(client, auth, monkeypatch):
     r = client.post(
         "/api/v1/deposit/callback/event",
         headers={"X-Station-Key": "wrong-key"},
-        json=confirm_event(session["operation_id"], position=1, weight=18.4, carriage=1),
+        json=confirm_event(session["operation_id"], position=1, weight=18.4, mech_position=1),
     )
     assert r.status_code == 401
 

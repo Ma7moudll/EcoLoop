@@ -3,9 +3,9 @@ import 'dart:convert';
 
 import 'package:async/async.dart' show DelegatingStreamSink;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:recycle_vision/core/api_client.dart';
-import 'package:recycle_vision/services/data_repository.dart';
-import 'package:recycle_vision/services/deposit_status_channel.dart';
+import 'package:ecoloop/core/api_client.dart';
+import 'package:ecoloop/services/data_repository.dart';
+import 'package:ecoloop/services/deposit_status_channel.dart';
 import 'package:shared/shared.dart';
 import 'package:stream_channel/stream_channel.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';

@@ -1,6 +1,6 @@
 """Scenario definitions for the hardware simulator.
 
-Each scenario produces a precise physical event sequence (carriage move,
+Each scenario produces a precise physical event sequence (chute rotation,
 weight ramp, beam, mechanical confirmation) — identical to what the real ESP32
 would report. The backend decides validity; the simulator never declares
 "success" itself.
@@ -9,10 +9,11 @@ Scenario                       Behaviour                               Backend o
 ---------------------------------------------------------------------------------------------
 valid-plastic (default)         route as told, 18.4g stable,             CONFIRMED +5 pts
                                 beam break -> clear, mech confirm
-wrong-position                  carriage reaches compartment 2 while     REJECTED (wrong_position)
+valid-metal                     same flow, routed to METAL              CONFIRMED
+wrong-position                  chute aligns with compartment 2 while   REJECTED (wrong_position)
                                 backend expected 1
-underweight                     route ok but only 0.5g reservoir         REJECTED (underweight)
-jam                             carriage jams mid-move                  REJECTED (jam)
+underweight                     route ok but only 0.5g reservoir        REJECTED (underweight)
+jam                             chute jams mid-rotation                 REJECTED (jam)
 timeout                         completes everything AFTER the session   REJECTED (expired)
                                 expiry (slow machine)
 duplicate                       emits two identical terminal events      first CONFIRMED,
@@ -34,8 +35,7 @@ class DepositPlan:
     final_weight: float | None = None  # overrides final reading (underweight)
     beam_seen: bool = True
     mechanical_confirmed: bool = True
-    jam_at_step: int | None = None      # V1 carriage: 1-based step index
-    jam_angle: float | None = None      # V2 rotary: chute angle that jams
+    jam_angle: float | None = None      # chute angle that jams mid-rotation
     delay_before_terminal: float = 0.0
     duplicate_terminal: bool = False
     emit_machine_status: str = "confirmed"  # what the machine believes happened
@@ -43,6 +43,7 @@ class DepositPlan:
 
 SCENARIOS: dict[str, DepositPlan] = {
     "valid-plastic": DepositPlan(name="valid-plastic"),
+    "valid-metal": DepositPlan(name="valid-metal"),
     "wrong-position": DepositPlan(
         name="wrong-position",
         destination_position=2,
@@ -56,23 +57,13 @@ SCENARIOS: dict[str, DepositPlan] = {
     ),
     "jam": DepositPlan(
         name="jam",
-        destination_position=2,  # force a real carriage move so it can jam
-        jam_at_step=1,
+        destination_position=2,  # force a real chute rotation so it can jam
+        jam_angle=45.0,
         emit_machine_status="jam",
     ),
     "timeout": DepositPlan(name="timeout", delay_before_terminal=320.0),
     "duplicate": DepositPlan(name="duplicate", duplicate_terminal=True),
 }
-
-
-# V2 rotary variants — same backend outcomes as their V1 counterparts.
-SCENARIOS["rotary-jam"] = DepositPlan(
-    name="rotary-jam",
-    destination_position=2,  # force a real chute rotation so it can jam
-    jam_angle=45.0,
-    emit_machine_status="jam",
-)
-SCENARIOS["rotary-valid-metal"] = DepositPlan(name="rotary-valid-metal")
 
 
 def get_scenario(name: str) -> DepositPlan:

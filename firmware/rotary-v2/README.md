@@ -1,7 +1,7 @@
 # EcoLoop Station V2 — Rotary firmware (ESP32)
 
 Firmware for the Rotary Sorting Mechanism V2. Implements the existing
-Recycle Vision station MQTT contract (`../../docs/mqtt-contract.md`) and
+EcoLoop station MQTT contract (`../../docs/mqtt-contract.md`) and
 reports the mechanism-neutral `mechanism_position` field.
 
 ## Build

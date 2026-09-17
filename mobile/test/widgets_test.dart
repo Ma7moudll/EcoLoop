@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:recycle_vision/widgets/app_bottom_nav.dart';
-import 'package:recycle_vision/widgets/gamification_cards.dart';
-import 'package:recycle_vision/widgets/history_row.dart';
-import 'package:recycle_vision/widgets/station/compartment_status.dart';
+import 'package:ecoloop/widgets/app_bottom_nav.dart';
+import 'package:ecoloop/widgets/gamification_cards.dart';
+import 'package:ecoloop/widgets/history_row.dart';
+import 'package:ecoloop/widgets/station/compartment_status.dart';
 import 'package:shared/shared.dart';
 
 void main() {

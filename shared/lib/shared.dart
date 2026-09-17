@@ -1,4 +1,4 @@
-/// # Recycle Vision — Shared Domain
+/// # EcoLoop — Shared Domain
 ///
 /// Single source of truth for the domain models and policies used by both the
 /// [server] backend and the [mobile] Flutter app:

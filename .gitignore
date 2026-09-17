@@ -29,6 +29,14 @@ server/data/
 ai-service/data/
 ai-service/models/*.pt
 ai-service/models/*.onnx
+ai-service/reports/
+
+# PlatformIO (implemented libraries, build output)
+firmware/**/.pio/
+.pio/
+
+# Runtime state
+data/avatars/
 
 # OS
 .DS_Store

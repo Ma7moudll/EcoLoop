@@ -1,4 +1,4 @@
-# recycle_vision
+# ecoloop
 
 A new Flutter project.
 

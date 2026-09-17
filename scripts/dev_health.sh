@@ -20,13 +20,13 @@ check() {  # check <name> <0|1>
   else echo "  [FAIL] $1"; fail=$((fail+1)); fi
 }
 
-echo "Recycle Vision dev stack health:"
+echo "EcoLoop dev stack health:"
 
 # 1. PostgreSQL
-if PGPASSWORD=recycle psql -h localhost -U recycle -lqt 2>/dev/null | cut -d'|' -f1 | grep -q recycle_vision; then
-  check "PostgreSQL db recycle_vision reachable" 0
+if PGPASSWORD=ecoloop psql -h localhost -U ecoloop -lqt 2>/dev/null | cut -d'|' -f1 | grep -q ecoloop; then
+  check "PostgreSQL db ecoloop reachable" 0
 else
-  check "PostgreSQL db recycle_vision reachable" 1
+  check "PostgreSQL db ecoloop reachable" 1
 fi
 
 # 2. mosquitto

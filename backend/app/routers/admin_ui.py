@@ -66,9 +66,11 @@ _PAGE = """<!DOCTYPE html>
 <div id="app" style="display:none">
   <h1>EcoLoop Admin Console</h1>
   <p class="sub" id="who"></p>
+  <div id="alerts"></div>
   <nav id="tabs"></nav>
 
   <section id="s-overview"></section>
+  <section id="s-analytics"></section>
   <section id="s-faculties"></section>
   <section id="s-students"></section>
   <section id="s-stations"></section>
@@ -107,6 +109,7 @@ async function login() {
     document.getElementById('who').textContent = 'Signed in as ' + u.name + ' (' + u.email + ')';
     buildTabs();
     show('overview');
+    updateAlerts();
   } catch (e) { document.getElementById('err').textContent = e.message; }
 }
 
@@ -267,7 +270,7 @@ async function delFaculty(i){
   await run(async ()=>{ const r=await send('DELETE','/admin/faculties/'+f.id); alert('Deleted '+(r.deleted||f.id)); });
 }
 
-const SECTIONS = ['overview','faculties','students','stations','deposits','challenges','rewards','health'];
+const SECTIONS = ['overview','analytics','faculties','students','stations','deposits','challenges','rewards','health'];
 function buildTabs() {
   const nav = document.getElementById('tabs');
   for (const s of SECTIONS) {
@@ -288,6 +291,39 @@ function show(s) {
 }
 
 function esc(v){ return v==null?'':String(v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function barRows(items, max){
+  return items.map(it => '<div style="display:flex;align-items:center;gap:8px;margin:6px 0">'+
+    '<div style="width:88px;font-size:11px;color:var(--muted)">'+esc(it.label)+'</div>'+
+    '<div style="flex:1;height:10px;background:#eef3ef;border-radius:6px;overflow:hidden">'+
+      '<div style="width:'+(max>0?(it.kg/max*100):0)+'%;height:100%;background:var(--green)"></div></div>'+
+    '<div style="width:72px;text-align:right;font-size:11px;font-weight:700">'+it.kg+' kg</div>'+
+    '<div style="width:46px;text-align:right;font-size:10px;color:var(--muted)">'+it.count+'</div>'+
+  '</div>').join('');
+}
+function block(title, items){
+  const head = '<h3 style="margin:16px 0 6px">'+title+'</h3>';
+  if(!items || !items.length) return head + '<p class="sub">No data yet.</p>';
+  const max = items.reduce((m,x)=>Math.max(m, x.kg), 0);
+  return head + '<div>'+barRows(items, max)+'</div>';
+}
+async function updateAlerts(){
+  const box = document.getElementById('alerts');
+  if(!box) return;
+  try{
+    const st = (await api('/admin/stations')).items || [];
+    const problems = st.filter(x => x.bin_full || x.last_error || x.status!=='online');
+    if(!problems.length){ box.innerHTML=''; return; }
+    box.innerHTML = problems.map(x=>{
+      const bits=[];
+      if(x.bin_full) bits.push('bin full');
+      if(x.last_error) bits.push('error: '+esc(x.last_error));
+      if(x.status!=='online') bits.push('status: '+esc(x.status));
+      return '<div style="background:#fbe9e7;color:#b3261e;border:1px solid #f3c9c4;'+
+        'border-radius:8px;padding:8px 12px;margin-bottom:8px;font-size:12px">'+
+        '<b>'+esc(x.station_code)+'</b> ('+esc(x.name)+'): '+bits.join(' · ')+'</div>';
+    }).join('');
+  }catch(e){ box.innerHTML=''; }
+}
 function pill(status){
   const good=['confirmed','online','IDLE','fulfilled','used','approved'];
   const bad=['rejected','expired','cancelled','disabled'];
@@ -333,6 +369,7 @@ function cards(items){
 async function render(s) {
   const el = document.getElementById('s-'+s);
   if (s==='overview') {
+    updateAlerts();
     const d = await api('/admin/overview');
     el.innerHTML = cards([
       {label:'Students', value:d.total_students},
@@ -379,8 +416,11 @@ async function render(s) {
     LAST_STATIONS = d.items || [];
     el.innerHTML =
       '<div style="margin-bottom:8px"><button style="width:auto;margin:0" onclick="addStationPrompt()">+ Add station</button></div>'+
-      table(['Code','Name','Status','Actions'],
+      table(['Code','Name','Status','Bin','Actions'],
         d.items.map((x,i)=>['<b>'+esc(x.station_code)+'</b>', esc(x.name), pill(x.status),
+          (x.bin_full?'<span class="pill bad">full</span>':'')+
+          (x.last_error?'<span class="pill warn">error</span>':(x.status==='online'?'<span class="pill ok">ok</span>':'')),
+         
           '<button style="width:auto;margin:2px" onclick="renameStation('+i+')">Rename</button>'+
           '<button style="width:auto;margin:2px" onclick="toggleStation('+i+')">'+(x.status==='online'?'Disable':'Enable')+'</button>'+
           '<button style="width:auto;margin:2px" onclick="delStation('+i+')">Delete</button>']));
@@ -444,6 +484,17 @@ async function render(s) {
       catHeader+
       '<div id="catalog-wrap">'+
       catalog+'</div>';
+  }
+  else if (s==='analytics') {
+    const d = await api('/admin/analytics');
+    const p = d.periods;
+    el.innerHTML =
+      block('Waste by day (30d)', p.day) +
+      block('Waste by week (12w)', p.week) +
+      block('Waste by month (12m)', p.month) +
+      block('Waste by year', p.year) +
+      block('Busiest stations', d.by_station) +
+      block('Waste type', d.by_type);
   }
   else if (s==='health') {
     let backend='DOWN', db='-', mqtt='-', ai='-';

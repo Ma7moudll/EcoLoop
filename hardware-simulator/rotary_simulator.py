@@ -1,12 +1,11 @@
 """Rotary Sorting Mechanism V2 simulator — drop-in for the future ESP32
 rotary firmware.
 
-Speaks the EXACT Recycle Vision station MQTT contract
-(`docs/mqtt-contract.md`), but reports the mechanism-neutral
-`mechanism_position` field (never `carriage_position`) and identifies itself
-with `mechanism = "rotary"` in heartbeats/status.
+Speaks the EXACT EcoLoop station MQTT contract (`docs/mqtt-contract.md`):
+reports the abstract `mechanism_position` field and identifies itself with
+`mechanism = "rotary"` in heartbeats/status.
 
-Flow per deposit (identical lifecycle to V1):
+Flow per deposit:
 
     route command -> ROUTING -> MOVING (chute rotates, telemetry)
       -> POSITIONED -> READY_FOR_DEPOSIT -> DETECTING (beam)
@@ -49,8 +48,7 @@ def _sleep(seconds: float) -> None:
 
 
 class EcoLoopRotarySimulator:
-    """Station V2 runtime: rotary chute instead of carriage, identical MQTT
-    behaviour otherwise."""
+    """Station runtime: rotary chute mechanics, standard MQTT behaviour."""
 
     def __init__(
         self,
@@ -306,7 +304,7 @@ class EcoLoopRotarySimulator:
             "event": "deposit_result",
             "status": status,
             "actual_position": actual_position,
-            # V2 reports ONLY the neutral field — never carriage_position.
+            # Reports ONLY the abstract field — no mechanical vocabulary.
             "mechanism_position": self.station.chute.mechanism_position(),
             "weight_grams": round(weight, 2),
             "weight_stable": weight >= self.cfg.min_weight_grams,
@@ -358,7 +356,7 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(
         description="EcoLoop Rotary V2 simulator — same MQTT contract as the "
-        "carriage V1 simulator, reporting mechanism_position."
+        "rotary-chute station, reporting mechanism_position."
     )
     parser.add_argument("--broker", default=None)
     parser.add_argument("--port", type=int, default=None)

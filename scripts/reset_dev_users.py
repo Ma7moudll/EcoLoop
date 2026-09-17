@@ -41,7 +41,7 @@ def main() -> int:
     if args.db == "e2e":
         os.environ.setdefault(
             "DATABASE_URL",
-            "postgresql+psycopg2://recycle:recycle@localhost:5432/recycle_vision_e2e",
+            "postgresql+psycopg2://ecoloop:ecoloop@localhost:5432/ecoloop_e2e",
         )
 
     from app.config import get_settings
