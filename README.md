@@ -116,10 +116,16 @@ Ports/services are owned by this project (API 8000/8080 · AI 8051 · MQTT
 
 ## Screenshots
 
-UI screenshots are not bundled yet — this repo's product is the embedded
-station + simulated platform. Capture contributions welcome: the Flutter
-app, the AI-service `/docs` UI, and the MQTT chain in action
-(`scripts/e2e_rotary_chain.py`).
+Flutter student app and the admin console:
+
+| | |
+|---|---|
+| ![Architecture overview](screenshots/architecture-overview.png) | ![Login screen](screenshots/app-login.png) |
+| ![Registration screen](screenshots/app-register.png) | ![Home dashboard](screenshots/app-home.png) |
+| ![Recycle — scan station QR](screenshots/app-recycle.png) | ![Rewards catalog](screenshots/app-rewards.png) |
+| ![Profile screen](screenshots/app-profile.png) | ![Admin — faculties view](screenshots/admin-faculties.png) |
+
+Run the app: `cd mobile/ecoloop && flutter run`.
 
 ## Status & Known Limitations
 
