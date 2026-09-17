@@ -145,7 +145,3 @@ Run the app: `cd mobile/ecoloop && flutter run`.
   pandas ≥ 3.0 — keep pandas pinned to ≤ 2.x.
 - Tests are green on a clean virtualenv: backend **200**, ai-service **87**,
   hardware-simulator **35**.
-
-## License
-
-MIT — see [LICENSE](LICENSE).
